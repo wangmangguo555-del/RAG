@@ -1,0 +1,65 @@
+app:
+  environment: local
+  host: 127.0.0.1
+  port: 8000
+  data_dir: ./data
+
+llm:
+  base_url: http://127.0.0.1:8080/v1
+  model: local-chat
+  api_key: local-no-key
+  request_timeout_seconds: 180
+  max_output_tokens: 1024
+  temperature: 0.1
+  enable_thinking: false
+
+embedding:
+  base_url: http://127.0.0.1:8081/v1
+  model: local-embedding
+  api_key: local-no-key
+  request_timeout_seconds: 60
+  batch_size: 8
+  document_prefix: ""
+  query_prefix: ""
+  fingerprint: 06507C7B42688469C4E7298B0A1E16DEFF06CAF291CF0A5B278C308249C3E439
+
+qdrant:
+  url: http://127.0.0.1:6333
+  active_alias_template: "repo_{repo_id}__active"
+  distance: cosine
+
+sqlite:
+  path: ./data/sqlite/rag.db
+  migrations_dir: ./migrations
+  busy_timeout_ms: 5000
+
+ingestion:
+  worker_poll_seconds: 2
+  max_file_bytes: 1048576
+  embedding_batch_size: 8
+  chunk_target_tokens: 500
+  chunk_max_tokens: 900
+  chunk_min_tokens: 80
+  text_overlap_tokens: 80
+  follow_symlinks: false
+  include_submodules: false
+  allow_remote_git: false
+  web_allowed_hosts:
+    - cn.vuejs.org
+  web_request_timeout_seconds: 30
+  chunker_version: code-v1
+
+retrieval:
+  dense_top_k: 30
+  lexical_top_k: 30
+  fused_top_k: 20
+  final_top_k: 8
+  rrf_k: 60
+  max_chunks_per_file: 3
+  context_token_budget: 8000
+
+security:
+  redact_secrets: true
+  reject_binary: true
+  admin_token: change-me-local-admin-token
+  log_prompts: false

@@ -1,0 +1,12 @@
+# Copy to the root of the target repository and adjust.
+node_modules/
+vendor/
+dist/
+build/
+target/
+generated/
+coverage/
+*.min.js
+*.map
+*.lock
+tests/fixtures/

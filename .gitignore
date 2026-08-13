@@ -1,0 +1,26 @@
+# Local runtime and downloaded tools
+.venv/
+.tools/
+.cache/
+
+# Runtime data and secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local logs
+*.log
+logs/
+
+# Local Codex state
+.codex/

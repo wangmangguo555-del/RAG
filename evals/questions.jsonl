@@ -1,0 +1,4 @@
+{"id":"sample-001","question":"刷新令牌在什么情况下会被拒绝？","repo_id":"sample-repo","should_answer":true}
+{"id":"sample-002","question":"过期的刷新令牌会抛出什么异常？","repo_id":"sample-repo","should_answer":true}
+{"id":"sample-003","question":"validate_refresh_token 如何处理被撤销的令牌？","repo_id":"sample-repo","should_answer":true}
+{"id":"sample-004","question":"这个示例仓库使用哪一种数据库？","repo_id":"sample-repo","should_answer":false}

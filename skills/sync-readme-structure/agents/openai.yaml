@@ -1,0 +1,7 @@
+interface:
+  display_name: "Sync README Structure"
+  short_description: "Keep the README project tree aligned with workspace changes"
+  default_prompt: "Use $sync-readme-structure to synchronize the README project tree."
+
+policy:
+  allow_implicit_invocation: true

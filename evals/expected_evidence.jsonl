@@ -1,0 +1,4 @@
+{"id":"sample-001","evidence":[{"path":"README.md","start_line":5,"end_line":8},{"path":"src/auth.py","start_line":15,"end_line":21}],"answer_points":["令牌已撤销","过期时间已到"]}
+{"id":"sample-002","evidence":[{"path":"README.md","start_line":7,"end_line":8},{"path":"src/auth.py","start_line":5,"end_line":6},{"path":"src/auth.py","start_line":19,"end_line":20}],"answer_points":["TokenExpiredError"]}
+{"id":"sample-003","evidence":[{"path":"src/auth.py","start_line":15,"end_line":18}],"answer_points":["返回 False"]}
+{"id":"sample-004","evidence":[],"answer_points":[],"notes":"明确无答案，用于后续生成评估；检索 Recall/MRR 不计分"}
