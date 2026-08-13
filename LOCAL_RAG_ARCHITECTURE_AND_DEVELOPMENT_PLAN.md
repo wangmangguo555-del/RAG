@@ -815,15 +815,17 @@ class EmbeddingPort(Protocol):
     async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
     async def embed_query(self, text: str) -> list[float]: ...
 
+
 class VectorStorePort(Protocol):
     async def upsert(self, chunks: list[Chunk], vectors: list[list[float]]) -> None: ...
     async def search_snapshot(
-        self, repo_id: str, snapshot_id: str, vector: list[float],
-        filters: SearchFilter, limit: int
+        self, repo_id: str, snapshot_id: str, vector: list[float], filters: SearchFilter, limit: int
     ) -> list[Hit]: ...
+
 
 class LexicalStorePort(Protocol):
     async def search(self, query: str, filters: SearchFilter, limit: int) -> list[Hit]: ...
+
 
 class GenerationPort(Protocol):
     async def answer(self, messages: list[Message], stream: bool) -> AsyncIterator[str]: ...
@@ -844,8 +846,8 @@ async def build_snapshot(repo, ref):
             docs = [parse_and_chunk(file) for file in batch]
             chunks = flatten(docs)
             vectors = await embedding.embed_documents([c.embedding_text for c in chunks])
-            await vector_store.upsert(chunks, vectors)       # 确定性 point ID
-            metadata.save_batch(snapshot.id, chunks)        # chunks + FTS + checkpoint
+            await vector_store.upsert(chunks, vectors)  # 确定性 point ID
+            metadata.save_batch(snapshot.id, chunks)  # chunks + FTS + checkpoint
 
         validate_snapshot(snapshot)
         snapshots.publish_atomically(snapshot.id)  # SQLite 单事务切换 published
@@ -1174,8 +1176,8 @@ sample repo、本项目正式索引和基础评测已经完成。在上述信息
 | 增量索引 | 直接规划完整差量流程 | 改为 Embedding cache → blob 复用 → 差量 collection | 需以缓存命中率和索引耗时证明收益 |
 | 解析切分 | 假定所有语言已使用 Tree-sitter | 明确当前 fallback，grammar 按 Python、TS/JS/Vue 渐进启用 | 需目标仓库语言统计和行号回归 |
 | 检索排序 | 忽略多仓库 dense 拼接问题，含项目路径硬编码 | 先修全局排序与通用特征，reranker 设决策门 | 跨仓库留出 MRR 决定是否引入模型 |
-| 评测可信度 | 将任一证据命中误称为 Recall | 拆分 Hit、Target Recall、MRR、nDCG，并区分开发/留出/挑战集 | 现有评测代码尚需按新口径实现 |
+| 评测可信度 | 将任一证据命中误称为 Recall | 已拆分 Hit、Target Recall、MRR、nDCG 和不可回答候选率，保留旧字段兼容别名，并按实际发现规则增加污染检测 | 尚需建立跨仓库留出/挑战集 |
 | 回答可信度 | 合法引用即 medium confidence | 分两步建设引用覆盖与 claim 验证，使用 evidence status | 需生成评测和拒答集证明阈值 |
 | 运维复杂度 | 过早规划分布式组件 | 保留 SQLite/Qdrant 单机栈，补 GC、备份和指标 | 非 loopback 部署前需安全门禁 |
 
-修订后的方案在当前约束下具备可实施性，架构复杂度与项目规模更匹配。阶段 A 的核心业务代码和自动化故障测试已落地，剩余验收项是连接真实 Qdrant/Worker 的强杀与发布故障演练；随后应进入阶段 B，建立跨仓库留出集并修正评测指标口径。引用支持率仍没有自动化证据，执行时不得跳过阶段 B 直接上 AST、reranker 或更多数据源。
+修订后的方案在当前约束下具备可实施性，架构复杂度与项目规模更匹配。阶段 A 的核心业务代码和自动化故障测试已落地，剩余验收项是连接真实 Qdrant/Worker 的强杀与发布故障演练；阶段 B 已完成评测指标口径修正和污染检测，下一步是建立跨仓库留出集与挑战集。引用支持率仍没有自动化证据，执行时不得跳过阶段 B 直接上 AST、reranker 或更多数据源。

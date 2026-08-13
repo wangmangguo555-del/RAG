@@ -299,9 +299,7 @@ class SqliteStore:
         error_message: str,
     ) -> str:
         async with self._connect() as connection:
-            cursor = await connection.execute(
-                "SELECT cscs FROM index_jobs WHERE bh=?", (job_id,)
-            )
+            cursor = await connection.execute("SELECT cscs FROM index_jobs WHERE bh=?", (job_id,))
             row = await cursor.fetchone()
             if not row:
                 raise ValueError(f"job not found: {job_id}")
@@ -453,12 +451,13 @@ class SqliteStore:
     async def list_published_snapshots(self) -> list[SnapshotRef]:
         async with self._connect() as connection:
             cursor = await connection.execute(
-                "SELECT bh,zsybh,zt FROM snapshots WHERE zt='published' ORDER BY zsybh"
+                "SELECT bh,zsybh,bbhs,zt FROM snapshots WHERE zt='published' ORDER BY zsybh"
             )
             return [
                 SnapshotRef(
                     id=str(row["bh"]),
                     repo_id=str(row["zsybh"]),
+                    commit_sha=str(row["bbhs"]),
                     status=SnapshotStatus(str(row["zt"])),
                 )
                 for row in await cursor.fetchall()

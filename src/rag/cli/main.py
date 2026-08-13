@@ -13,8 +13,13 @@ import typer
 
 from rag.container import Container
 from rag.domain.models import Repository, SearchFilter, SourceType
-from rag.evaluation.retrieval import evaluate_retrieval, load_evaluation_cases
+from rag.evaluation.retrieval import (
+    evaluate_retrieval,
+    find_contaminated_evaluation_paths,
+    load_evaluation_cases,
+)
 from rag.infrastructure.settings import load_settings
+from rag.ingestion.discovery import decode_text
 from rag.worker.main import run_worker
 
 app = typer.Typer(no_args_is_help=True, help="Local RAG administration CLI")
@@ -151,9 +156,7 @@ def gc_snapshots(
                 return
             typer.echo("Dry-run only; no SQLite rows or Qdrant collections were deleted.")
             for candidate in candidates:
-                collection_name = container.vectors.collection_name(
-                    candidate.repo_id, candidate.id
-                )
+                collection_name = container.vectors.collection_name(candidate.repo_id, candidate.id)
                 typer.echo(
                     f"{candidate.status.value}\t{candidate.repo_id}\t{candidate.id}\t"
                     f"{collection_name}\t{candidate.reason}"
@@ -239,6 +242,72 @@ def evaluate(
         container = _build_container()
         try:
             await container.metadata.initialize()
+            evaluated_repo_ids = sorted({repo_id or case.repo_id for case in cases})
+            published_snapshots = {
+                snapshot.repo_id: snapshot
+                for snapshot in await container.metadata.list_published_snapshots()
+            }
+            audited_repositories: list[dict[str, str]] = []
+            for evaluated_repo_id in evaluated_repo_ids:
+                repository = await container.metadata.get_repository(evaluated_repo_id)
+                if repository is None:
+                    raise typer.BadParameter(
+                        f"repository is not registered: {evaluated_repo_id}",
+                        param_hint="--repo",
+                    )
+                published_snapshot = published_snapshots.get(evaluated_repo_id)
+                if published_snapshot is None:
+                    raise typer.BadParameter(
+                        f"repository has no published snapshot: {evaluated_repo_id}",
+                        param_hint="--repo",
+                    )
+                if repository.source_type not in {
+                    SourceType.WORKING_TREE,
+                    SourceType.LOCAL_MIRROR,
+                }:
+                    audited_repositories.append(
+                        {
+                            "repo_id": evaluated_repo_id,
+                            "commit_sha": published_snapshot.commit_sha,
+                            "status": "not_applicable",
+                        }
+                    )
+                    continue
+                commit_sha = published_snapshot.commit_sha
+                blobs = await container.sources.list_blobs(repository, commit_sha)
+                ragignore_lines: tuple[str, ...] = ()
+                ragignore_blob = next((blob for blob in blobs if blob.path == ".ragignore"), None)
+                if ragignore_blob is not None:
+                    ragignore_text = decode_text(
+                        await container.sources.read_blob(repository, ragignore_blob.blob_sha)
+                    )
+                    if ragignore_text is not None:
+                        ragignore_lines = tuple(
+                            line.strip()
+                            for line in ragignore_text.splitlines()
+                            if line.strip() and not line.lstrip().startswith("#")
+                        )
+                contaminated_paths = find_contaminated_evaluation_paths(
+                    repository,
+                    (questions, expected),
+                    blobs,
+                    max_file_bytes=container.settings.ingestion.max_file_bytes,
+                    ragignore_lines=ragignore_lines,
+                )
+                if contaminated_paths:
+                    raise typer.BadParameter(
+                        "evaluation data would be indexed by "
+                        f"{evaluated_repo_id}: {', '.join(contaminated_paths)}; "
+                        "exclude these paths before benchmarking",
+                        param_hint="--questions/--expected",
+                    )
+                audited_repositories.append(
+                    {
+                        "repo_id": evaluated_repo_id,
+                        "commit_sha": commit_sha,
+                        "status": "passed",
+                    }
+                )
             report = await evaluate_retrieval(
                 cases,
                 partial(container.query_service.search, mode=retrieval_mode),
@@ -249,6 +318,10 @@ def evaluate(
                     "chunker_version": container.settings.ingestion.chunker_version,
                     "mode": retrieval_mode,
                     "retrieval": container.settings.retrieval.model_dump(mode="json"),
+                    "evaluation_contamination_audit": {
+                        "status": "passed",
+                        "repositories": audited_repositories,
+                    },
                 },
             )
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -256,15 +329,27 @@ def evaluate(
                 json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
             summary = report["summary"]
-            recall = summary["evidence_recall_at_k"]
+            hit_at_k = summary["hit_at_k"]
+            target_recall = summary["target_recall_at_k"]
             mrr = summary["mrr_at_k"]
+            ndcg = summary["ndcg_at_k"]
+            unanswerable_candidate_rate = summary["unanswerable_candidate_rate_at_k"]
             typer.echo(
                 f"Cases: {summary['case_count']} ({summary['answerable_case_count']} scored)"
             )
+            typer.echo(f"Hit@{top_k}: {hit_at_k:.3f}" if hit_at_k is not None else "Hit: n/a")
             typer.echo(
-                f"Evidence Recall@{top_k}: {recall:.3f}" if recall is not None else "Recall: n/a"
+                f"Target Recall@{top_k}: {target_recall:.3f}"
+                if target_recall is not None
+                else "Target Recall: n/a"
             )
             typer.echo(f"MRR@{top_k}: {mrr:.3f}" if mrr is not None else "MRR: n/a")
+            typer.echo(f"nDCG@{top_k}: {ndcg:.3f}" if ndcg is not None else "nDCG: n/a")
+            typer.echo(
+                f"Unanswerable Candidate Rate@{top_k}: {unanswerable_candidate_rate:.3f}"
+                if unanswerable_candidate_rate is not None
+                else "Unanswerable Candidate Rate: n/a"
+            )
             typer.echo(f"Report: {output}")
         finally:
             await container.close()

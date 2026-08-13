@@ -108,7 +108,9 @@ class _VectorStub:
         self.events.append("create_collection")
         return "repo_demo__snap_snapshot-1"
 
-    async def upsert(self, collection_name: str, chunks: list[Any], vectors: list[list[float]]) -> None:
+    async def upsert(
+        self, collection_name: str, chunks: list[Any], vectors: list[list[float]]
+    ) -> None:
         del collection_name, chunks, vectors
         self.events.append("upsert")
 
@@ -121,9 +123,7 @@ class _VectorStub:
             raise ValueError("向量数量不一致")
 
 
-def _service(
-    metadata: _MetadataStub, vectors: _VectorStub
-) -> IndexService:
+def _service(metadata: _MetadataStub, vectors: _VectorStub) -> IndexService:
     return IndexService(
         metadata=cast(MetadataStorePort, metadata),
         git=cast(GitSourcePort, _GitStub()),

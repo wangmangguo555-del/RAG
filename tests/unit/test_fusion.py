@@ -108,9 +108,7 @@ def test_class_module_boost_is_not_tied_to_project_directory() -> None:
         _hit("module", "packages/search/query_service.py", "dense"),
         symbol="search",
         content=(
-            "async def search(self):\n"
-            "    results = await self.backend.search()\n"
-            "    return results"
+            "async def search(self):\n    results = await self.backend.search()\n    return results"
         ),
         score=0.02,
     )

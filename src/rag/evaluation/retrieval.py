@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from math import log2
 from pathlib import Path
 from typing import Any
 
-from rag.domain.models import SearchFilter, SearchHit
+from rag.domain.models import GitBlob, Repository, SearchFilter, SearchHit, SourceType
+from rag.ingestion.discovery import filter_blobs
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +132,39 @@ def load_evaluation_cases(questions_path: Path, expected_path: Path) -> list[Eva
     return cases
 
 
+def find_contaminated_evaluation_paths(
+    repository: Repository,
+    evaluation_paths: Sequence[Path],
+    blobs: Sequence[GitBlob],
+    *,
+    max_file_bytes: int,
+    ragignore_lines: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """Return evaluation files that the normal discovery policy would index."""
+    if repository.source_type not in {SourceType.WORKING_TREE, SourceType.LOCAL_MIRROR}:
+        return ()
+
+    repository_root = Path(repository.source_uri).resolve()
+    blobs_by_path = {blob.path.replace("\\", "/"): blob for blob in blobs}
+    evaluation_blobs: list[GitBlob] = []
+    for evaluation_path in evaluation_paths:
+        try:
+            relative_path = evaluation_path.resolve().relative_to(repository_root).as_posix()
+        except ValueError:
+            continue
+        blob = blobs_by_path.get(relative_path)
+        if blob is not None:
+            evaluation_blobs.append(blob)
+
+    selected = filter_blobs(
+        evaluation_blobs,
+        repository,
+        max_file_bytes,
+        ragignore_lines,
+    )
+    return tuple(sorted({blob.path for blob in selected}))
+
+
 def evidence_matches(hit: SearchHit, target: EvidenceTarget) -> bool:
     if hit.path.replace("\\", "/") != target.path:
         return False
@@ -139,6 +174,35 @@ def evidence_matches(hit: SearchHit, target: EvidenceTarget) -> bool:
     target_end = target.end_line or target.start_line
     assert target_start is not None and target_end is not None
     return hit.start_line <= target_end and hit.end_line >= target_start
+
+
+def _discounted_gain(ranks: Sequence[int]) -> float:
+    return sum(1.0 / log2(rank + 1) for rank in ranks)
+
+
+def _target_match_ranks(
+    hits: Sequence[SearchHit], targets: Sequence[EvidenceTarget]
+) -> tuple[list[int], list[int | None], list[int]]:
+    matched_hit_ranks: list[int] = []
+    target_first_ranks: list[int | None] = [None] * len(targets)
+    newly_relevant_hit_ranks: list[int] = []
+
+    for rank, hit in enumerate(hits, 1):
+        matched_target_indexes = [
+            index for index, target in enumerate(targets) if evidence_matches(hit, target)
+        ]
+        if not matched_target_indexes:
+            continue
+        matched_hit_ranks.append(rank)
+        newly_matched = False
+        for index in matched_target_indexes:
+            if target_first_ranks[index] is None:
+                target_first_ranks[index] = rank
+                newly_matched = True
+        if newly_matched:
+            newly_relevant_hit_ranks.append(rank)
+
+    return matched_hit_ranks, target_first_ranks, newly_relevant_hit_ranks
 
 
 async def evaluate_retrieval(
@@ -153,24 +217,42 @@ async def evaluate_retrieval(
         raise ValueError("top_k must be at least 1")
 
     details: list[dict[str, Any]] = []
-    recalls: list[float] = []
+    hits_at_k: list[float] = []
+    target_recalls: list[float] = []
     reciprocal_ranks: list[float] = []
+    normalized_discounted_gains: list[float] = []
+    unanswerable_no_hits: list[float] = []
+    hit_at_k: float | None
+    target_recall: float | None
+    reciprocal_rank: float | None
+    ndcg: float | None
+    unanswerable_no_hit: bool | None
     for case in cases:
         repo_id = repo_id_override or case.repo_id
         hits = (await search(case.question, SearchFilter(repo_ids=(repo_id,)), top_k))[:top_k]
-        matched_ranks = [
-            rank
-            for rank, hit in enumerate(hits, 1)
-            if any(evidence_matches(hit, target) for target in case.expected_evidence)
-        ]
+        matched_ranks, target_match_ranks, newly_relevant_ranks = _target_match_ranks(
+            hits, case.expected_evidence
+        )
         if case.should_answer:
-            recall = 1.0 if matched_ranks else 0.0
+            hit_at_k = 1.0 if matched_ranks else 0.0
+            matched_target_count = sum(rank is not None for rank in target_match_ranks)
+            target_recall = matched_target_count / len(case.expected_evidence)
             reciprocal_rank = 1.0 / matched_ranks[0] if matched_ranks else 0.0
-            recalls.append(recall)
+            ideal_relevant_count = min(len(case.expected_evidence), top_k)
+            ideal_dcg = _discounted_gain(range(1, ideal_relevant_count + 1))
+            ndcg = _discounted_gain(newly_relevant_ranks) / ideal_dcg if ideal_dcg else 0.0
+            hits_at_k.append(hit_at_k)
+            target_recalls.append(target_recall)
             reciprocal_ranks.append(reciprocal_rank)
+            normalized_discounted_gains.append(ndcg)
+            unanswerable_no_hit = None
         else:
-            recall = None
+            hit_at_k = None
+            target_recall = None
             reciprocal_rank = None
+            ndcg = None
+            unanswerable_no_hit = not hits
+            unanswerable_no_hits.append(float(unanswerable_no_hit))
         details.append(
             {
                 "id": case.id,
@@ -179,8 +261,14 @@ async def evaluate_retrieval(
                 "should_answer": case.should_answer,
                 "expected_evidence": [asdict(target) for target in case.expected_evidence],
                 "matched_ranks": matched_ranks,
-                "recall_at_k": recall,
+                "target_match_ranks": target_match_ranks,
+                "hit_at_k": hit_at_k,
+                "recall_at_k": hit_at_k,
+                "target_recall_at_k": target_recall,
                 "reciprocal_rank": reciprocal_rank,
+                "ndcg_at_k": ndcg,
+                "unanswerable_no_hit_at_k": unanswerable_no_hit,
+                "returned_candidate_count": len(hits),
                 "hits": [
                     {
                         "rank": rank,
@@ -196,16 +284,48 @@ async def evaluate_retrieval(
             }
         )
 
-    answerable_count = len(recalls)
+    answerable_count = len(hits_at_k)
+    unanswerable_count = len(unanswerable_no_hits)
+    hit_at_k = sum(hits_at_k) / answerable_count if answerable_count else None
     summary = {
         "case_count": len(cases),
         "answerable_case_count": answerable_count,
-        "unanswerable_case_count": len(cases) - answerable_count,
+        "unanswerable_case_count": unanswerable_count,
         "top_k": top_k,
-        "evidence_recall_at_k": sum(recalls) / answerable_count if answerable_count else None,
+        "hit_at_k": hit_at_k,
+        "target_recall_at_k": (
+            sum(target_recalls) / answerable_count if answerable_count else None
+        ),
         "mrr_at_k": (sum(reciprocal_ranks) / answerable_count if answerable_count else None),
+        "ndcg_at_k": (
+            sum(normalized_discounted_gains) / answerable_count if answerable_count else None
+        ),
+        "unanswerable_no_hit_rate_at_k": (
+            sum(unanswerable_no_hits) / unanswerable_count if unanswerable_count else None
+        ),
+        "unanswerable_candidate_rate_at_k": (
+            1.0 - (sum(unanswerable_no_hits) / unanswerable_count) if unanswerable_count else None
+        ),
+        # Compatibility alias for reports consumed before the metric was correctly named.
+        "evidence_recall_at_k": hit_at_k,
     }
-    report: dict[str, Any] = {"summary": summary, "details": details}
+    report: dict[str, Any] = {
+        "summary": summary,
+        "metric_definitions": {
+            "hit_at_k": "fraction of answerable cases with at least one target hit",
+            "target_recall_at_k": "macro average of matched target evidence per answerable case",
+            "mrr_at_k": "mean reciprocal rank of the first target hit",
+            "ndcg_at_k": "ranking quality of hits that cover previously unmatched targets",
+            "unanswerable_no_hit_rate_at_k": "fraction of unanswerable cases returning no candidates",
+            "unanswerable_candidate_rate_at_k": (
+                "fraction of unanswerable cases returning one or more candidates"
+            ),
+        },
+        "deprecated_metrics": {
+            "evidence_recall_at_k": "compatibility alias for hit_at_k; use hit_at_k"
+        },
+        "details": details,
+    }
     if configuration is not None:
         report["configuration"] = dict(configuration)
     return report

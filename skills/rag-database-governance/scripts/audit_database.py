@@ -9,20 +9,53 @@ from pathlib import Path
 EXPECTED_COLUMNS: dict[str, set[str]] = {
     "schema_migrations": {"bb", "yysj"},
     "repositories": {
-        "bh", "mc", "lylx", "lydz", "mryy", "sfqy", "bhx_json", "pcx_json", "cjsj", "gxsj"
+        "bh",
+        "mc",
+        "lylx",
+        "lydz",
+        "mryy",
+        "sfqy",
+        "bhx_json",
+        "pcx_json",
+        "cjsj",
+        "gxsj",
     },
-    "snapshots": {
-        "bh", "zsybh", "bbhs", "sybb", "zt", "tjxx_json", "cwxx", "cjsj", "fbsj"
-    },
+    "snapshots": {"bh", "zsybh", "bbhs", "sybb", "zt", "tjxx_json", "cwxx", "cjsj", "fbsj"},
     "files": {"kzbh", "lj", "dxhs", "yy", "jxzt", "nrzjs"},
     "chunks": {
-        "bh", "xldbh", "kzbh", "zsybh", "bbhs", "lj", "yy", "fh", "jdlx", "qsh", "jsh",
-        "nr", "xlwb", "nrhs", "sfcs", "ysj_json"
+        "bh",
+        "xldbh",
+        "kzbh",
+        "zsybh",
+        "bbhs",
+        "lj",
+        "yy",
+        "fh",
+        "jdlx",
+        "qsh",
+        "jsh",
+        "nr",
+        "xlwb",
+        "nrhs",
+        "sfcs",
+        "ysj_json",
     },
     "chunks_fts": {"fpbh", "kzbh", "zsybh", "lj", "fh", "nr"},
     "index_jobs": {
-        "bh", "zsybh", "qqyy", "yjxbbhs", "zt", "cscs", "cwdm", "cwxx", "cjsj", "kssj",
-        "jssj", "xtsj", "xccssj", "kzbh"
+        "bh",
+        "zsybh",
+        "qqyy",
+        "yjxbbhs",
+        "zt",
+        "cscs",
+        "cwdm",
+        "cwxx",
+        "cjsj",
+        "kssj",
+        "jssj",
+        "xtsj",
+        "xccssj",
+        "kzbh",
     },
 }
 
@@ -131,8 +164,10 @@ def audit(database: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit Local RAG SQLite schema and integrity")
     parser.add_argument(
-        "--database", type=Path, default=Path("data/sqlite/rag.db"),
-        help="SQLite database path to audit"
+        "--database",
+        type=Path,
+        default=Path("data/sqlite/rag.db"),
+        help="SQLite database path to audit",
     )
     args = parser.parse_args()
     database = args.database.resolve()

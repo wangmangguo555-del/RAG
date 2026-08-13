@@ -138,8 +138,11 @@ def boost_exact_matches(
             score += path_boost
         path_parts = set(path.stem.split("_"))
         # 类名和模块名的拆词匹配适用于常见仓库布局，不能依赖本项目的 src/rag 路径。
-        if classes and path.suffix in _CODE_SUFFIXES and not declaration_stub and any(
-            path_parts & class_parts for class_parts in classes.values()
+        if (
+            classes
+            and path.suffix in _CODE_SUFFIXES
+            and not declaration_stub
+            and any(path_parts & class_parts for class_parts in classes.values())
         ):
             score += class_module_boost
         if declaration_stub and symbol in classes:

@@ -438,12 +438,17 @@ uv run ragctl gc --dry-run
 uv run ragctl evaluate
 ```
 
-命令计算 Evidence Recall@10 和 MRR@10，不调用生成模型；逐题命中排名、候选证据以及
-Embedding fingerprint、chunker version 和检索参数写入
+命令计算 Hit@10、Target Recall@10、MRR@10、nDCG@10 和不可回答候选率，不调用生成
+模型。Hit 表示至少命中一条目标证据，Target Recall 表示目标证据覆盖比例，nDCG 衡量覆盖
+新目标证据的结果是否靠前；不可回答候选率用于暴露检索层仍返回候选的比例。逐题目标命中
+排名、候选证据以及 Embedding fingerprint、chunker version 和检索参数写入
 `data/evals/retrieval-latest.json`。使用其他仓库验证标注时可传入
 `--repo <repo-id>`，使用 `--top-k` 调整评估截断位置。A/B 检索时使用
 `--mode dense`、`--mode lexical` 或默认的 `--mode hybrid`；三种模式使用相同评估集，
-便于判断增益来自稠密检索、关键词检索还是融合。
+便于判断增益来自稠密检索、关键词检索还是融合。旧报告字段
+`evidence_recall_at_k` 暂时作为 `hit_at_k` 的兼容别名保留，新增消费方应使用新字段。
+执行前会按实际文件发现、include/exclude 和 `.ragignore` 规则检查评测文件；若评测数据会被
+被测仓库索引，命令会拒绝运行并列出污染路径。审计结果与解析到的 commit 一并写入报告。
 
 ### 6.3 HTTPS 单页知识源
 
@@ -550,9 +555,9 @@ SQLite snapshot/FTS5、检索评估指标，以及 FastAPI 存活端点。
 - 管理 token 是基础认证；多人或网络部署需要 TLS、正式身份认证、审计和 repo 权限过滤。
 - 24×7 运行需要进一步配置 WinSW/systemd、定期备份和监控告警。
 
-当前已具备可执行的检索评估入口和 sample repo 示例标注；下一步应将示例扩充为目标仓库的
-50～100 条真实问题与预期证据，并形成 Recall/MRR 基线，再决定是否增加 Tree-sitter、
-Embedding cache、reranker 或更复杂的查询改写。
+当前已具备可执行的检索评估入口、可解释的 Hit/Target Recall/MRR/nDCG/不可回答指标和
+50 条本项目开发集标注，并已增加评测污染检测；下一步应建立至少一个不同仓库的留出集与
+挑战集，再由开发集与留出集的共同结果决定是否引入 reranker、AST 解析和更复杂的增量索引。
 
 ## 12. 深入文档
 

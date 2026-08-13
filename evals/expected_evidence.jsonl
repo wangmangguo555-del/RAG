@@ -31,9 +31,9 @@
 {"id":"rag-031","evidence":[{"path":"src/rag/api/query_routes.py","start_line":26,"end_line":50},{"path":"src/rag/api/schemas.py","start_line":46,"end_line":62}],"answer_points":["answer","confidence","citations","snapshots","timing"]}
 {"id":"rag-032","evidence":[{"path":"src/rag/api/query_routes.py","start_line":26,"end_line":71},{"path":"README.md","start_line":442,"end_line":456}],"answer_points":["search 只返回证据","query 调用生成模型"]}
 {"id":"rag-033","evidence":[{"path":"src/rag/api/app.py","start_line":77,"end_line":94},{"path":"LOCAL_RAG_ENVIRONMENT_AND_APPLICATIONS.md","start_line":684,"end_line":690}],"answer_points":["SQLite","Qdrant","LLM","Embedding"]}
-{"id":"rag-034","evidence":[{"path":"src/rag/cli/main.py","start_line":71,"end_line":95}],"answer_points":["id","path","name","ref","working_tree"]}
-{"id":"rag-035","evidence":[{"path":"src/rag/cli/main.py","start_line":161,"end_line":219},{"path":"README.md","start_line":404,"end_line":420}],"answer_points":["Evidence Recall@K","MRR@K","不调用 LLM"]}
-{"id":"rag-036","evidence":[{"path":"src/rag/cli/main.py","start_line":222,"end_line":243}],"answer_points":["SQLite","Qdrant","LLM","Embedding"]}
+{"id":"rag-034","evidence":[{"path":"src/rag/cli/main.py","start_line":78,"end_line":102}],"answer_points":["id","path","name","ref","working_tree"]}
+{"id":"rag-035","evidence":[{"path":"src/rag/cli/main.py","start_line":212,"end_line":357},{"path":"README.md","start_line":432,"end_line":452}],"answer_points":["Hit@K","Target Recall@K","MRR@K","nDCG@K","不可回答候选率","评测污染检测","不调用 LLM"]}
+{"id":"rag-036","evidence":[{"path":"src/rag/cli/main.py","start_line":360,"end_line":379}],"answer_points":["SQLite","Qdrant","LLM","Embedding"]}
 {"id":"rag-037","evidence":[{"path":"config/default.yaml","start_line":7,"end_line":14},{"path":"src/rag/infrastructure/settings.py","start_line":18,"end_line":37},{"path":"src/rag/infrastructure/settings.py","start_line":92,"end_line":100},{"path":"LOCAL_RAG_ENVIRONMENT_AND_APPLICATIONS.md","start_line":279,"end_line":329}],"answer_points":["127.0.0.1:8080/v1","180 秒","1024"]}
 {"id":"rag-038","evidence":[{"path":"config/default.yaml","start_line":16,"end_line":24},{"path":"README.md","start_line":480,"end_line":487}],"answer_points":["区分向量语义空间","切换模型更新 fingerprint","重建索引"]}
 {"id":"rag-039","evidence":[{"path":"config/default.yaml","start_line":52,"end_line":59},{"path":"src/rag/infrastructure/settings.py","start_line":75,"end_line":84},{"path":"README.md","start_line":313,"end_line":326}],"answer_points":["30","30","20","8"]}

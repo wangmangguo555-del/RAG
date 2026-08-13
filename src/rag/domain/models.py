@@ -153,6 +153,7 @@ class SnapshotRef:
 
     id: str
     repo_id: str
+    commit_sha: str
     status: SnapshotStatus
 
 

@@ -99,6 +99,9 @@ async def test_repository_snapshot_chunk_and_fts(tmp_path: Path) -> None:
     assert hits[0].chunk_id == "chunk-1"
     assert await store.get_published_snapshot("demo") == snapshot
     assert await store.find_published_snapshot("demo", "a" * 40, "v1") == snapshot
+    published = await store.list_published_snapshots()
+    assert len(published) == 1
+    assert published[0].commit_sha == "a" * 40
 
 
 @pytest.mark.asyncio

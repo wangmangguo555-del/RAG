@@ -43,9 +43,7 @@ async def _execute_claimed_job(container: Container, job_id: str, repo_id: str) 
         job = await container.metadata.get_job(job_id)
         attempt = job.attempt if job else 1
         # 退避随尝试次数增长，避免本地模型离线时 Worker 持续占用 CPU 和日志。
-        retry_delay = container.settings.ingestion.job_retry_base_seconds * 2 ** max(
-            0, attempt - 1
-        )
+        retry_delay = container.settings.ingestion.job_retry_base_seconds * 2 ** max(0, attempt - 1)
         status = await container.metadata.retry_or_fail_job(
             job_id,
             retryable=retryable,

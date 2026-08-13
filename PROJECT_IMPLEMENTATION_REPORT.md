@@ -58,8 +58,10 @@ Uvicorn smoke         live=200、ready=200、OpenAPI 正常
 ```
 
 检索评估入口已使用当前项目自身建立 50 条专属问题，其中 45 条可回答、5 条明确无答案。
-评估支持 dense-only、lexical-only 和 hybrid 三种模式，并记录 Evidence Recall@K、MRR@K、
-逐题候选及配置指纹，作为后续切分、召回和排序优化的可复现基线。
+评估支持 dense-only、lexical-only 和 hybrid 三种模式，并记录 Hit@K、Target Recall@K、
+MRR@K、nDCG@K、不可回答候选率、逐题候选及配置指纹，作为后续切分、召回和排序优化的
+可复现基线。评测执行前按真实文件发现规则检查 questions/expected 是否会进入索引，检测到
+污染时拒绝运行；旧 `evidence_recall_at_k` 仅作为 `hit_at_k` 的兼容别名保留。
 
 2026-08-13 的 A/B 表明 Hybrid 明显优于 dense-only 和 lexical-only；精确路径/符号及
 类模块提升进一步改善了前排排序。由于每次代码或文档提交都会改变 commit、chunk ID、
