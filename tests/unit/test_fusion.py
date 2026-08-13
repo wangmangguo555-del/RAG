@@ -69,3 +69,35 @@ def test_plain_words_do_not_trigger_symbol_boost() -> None:
     )
 
     assert [hit.chunk_id for hit in boosted] == ["first", "chunk"]
+
+
+def test_class_query_prefers_implementation_over_declaration_stub() -> None:
+    declaration = replace(
+        _hit("declaration", "src/rag/application/index_service.py", "dense"),
+        symbol="IndexService",
+        content="class IndexService:",
+        score=0.02,
+    )
+    implementation = replace(
+        _hit("implementation", "src/rag/application/index_service.py", "lexical"),
+        symbol="submit",
+        content=(
+            "async def submit(self, repo_id: str) -> str:\n"
+            "    repository = await self.metadata.get_repository(repo_id)\n"
+            "    return repository.id"
+        ),
+        score=0.02,
+    )
+    unrelated = replace(_hit("other", "README.md", "dense"), score=0.03)
+
+    boosted = boost_exact_matches(
+        [declaration, unrelated, implementation],
+        "IndexService 如何提交任务？",
+        symbol_boost=0.02,
+        path_boost=0.01,
+        class_module_boost=0.02,
+        declaration_stub_penalty=0.02,
+    )
+
+    assert boosted[0].chunk_id == "implementation"
+    assert boosted[-1].chunk_id == "declaration"

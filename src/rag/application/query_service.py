@@ -86,6 +86,8 @@ class QueryService:
             question,
             symbol_boost=self.settings.exact_symbol_boost,
             path_boost=self.settings.exact_path_boost,
+            class_module_boost=self.settings.class_module_boost,
+            declaration_stub_penalty=self.settings.declaration_stub_penalty,
         )
         return diversify(
             boosted,

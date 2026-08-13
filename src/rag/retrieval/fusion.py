@@ -9,6 +9,8 @@ from pathlib import PurePosixPath
 from rag.domain.models import SearchHit
 
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-/]{2,}")
+_CAMEL_PART = re.compile(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+")
+_DECLARATION = re.compile(r"^(?:class|def|async def)\s+")
 
 
 def _query_identifiers(question: str) -> set[str]:
@@ -20,6 +22,21 @@ def _query_identifiers(question: str) -> set[str]:
         if code_shaped or camel_or_acronym:
             identifiers.add(value.casefold())
     return identifiers
+
+
+def _class_identifiers(question: str) -> dict[str, set[str]]:
+    identifiers: dict[str, set[str]] = {}
+    for match in _IDENTIFIER.finditer(question):
+        value = match.group(0)
+        parts = {part.casefold() for part in _CAMEL_PART.findall(value)}
+        if len(parts) >= 2 and any(character.isupper() for character in value[1:]):
+            identifiers[value.casefold()] = parts
+    return identifiers
+
+
+def _is_declaration_stub(hit: SearchHit) -> bool:
+    lines = [line for line in hit.content.splitlines() if line.strip()]
+    return len(lines) <= 2 and bool(lines) and bool(_DECLARATION.match(lines[0].strip()))
 
 
 def reciprocal_rank_fusion(
@@ -71,9 +88,20 @@ def boost_exact_matches(
     *,
     symbol_boost: float,
     path_boost: float,
+    class_module_boost: float = 0.0,
+    declaration_stub_penalty: float = 0.0,
 ) -> list[SearchHit]:
     identifiers = _query_identifiers(question)
-    if not identifiers or (symbol_boost == 0 and path_boost == 0):
+    classes = _class_identifiers(question)
+    if not identifiers or all(
+        boost == 0
+        for boost in (
+            symbol_boost,
+            path_boost,
+            class_module_boost,
+            declaration_stub_penalty,
+        )
+    ):
         return list(hits)
 
     boosted: list[SearchHit] = []
@@ -83,9 +111,21 @@ def boost_exact_matches(
         normalized_path = hit.path.replace("\\", "/").casefold()
         path = PurePosixPath(normalized_path)
         path_terms = {normalized_path, path.name, path.stem, *path.parts}
+        declaration_stub = _is_declaration_stub(hit)
         if symbol and symbol in identifiers:
             score += symbol_boost
         if identifiers & path_terms:
             score += path_boost
+        path_parts = set(path.stem.split("_"))
+        if (
+            classes
+            and normalized_path.startswith("src/rag/")
+            and path.suffix == ".py"
+            and not declaration_stub
+            and any(path_parts & class_parts for class_parts in classes.values())
+        ):
+            score += class_module_boost
+        if declaration_stub and symbol in classes:
+            score -= declaration_stub_penalty
         boosted.append(replace(hit, score=score))
     return sorted(boosted, key=lambda hit: hit.score, reverse=True)

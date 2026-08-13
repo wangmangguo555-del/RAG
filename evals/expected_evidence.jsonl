@@ -1,7 +1,7 @@
 {"id":"rag-001","evidence":[{"path":"README.md","start_line":1,"end_line":32}],"answer_points":["本地知识检索与问答","FastAPI","llama.cpp","Qdrant","SQLite FTS5"]}
 {"id":"rag-002","evidence":[{"path":"src/rag/application/query_service.py","start_line":41,"end_line":73},{"path":"README.md","start_line":295,"end_line":326}],"answer_points":["asyncio.gather","dense tasks","lexical task"]}
 {"id":"rag-003","evidence":[{"path":"src/rag/retrieval/fusion.py","start_line":10,"end_line":29},{"path":"README.md","start_line":313,"end_line":319}],"answer_points":["按排名融合","1/(k+rank)"]}
-{"id":"rag-004","evidence":[{"path":"src/rag/retrieval/fusion.py","start_line":32,"end_line":50}],"answer_points":["max_chunks_per_file","content_hash 去重"]}
+{"id":"rag-004","evidence":[{"path":"src/rag/retrieval/fusion.py","start_line":64,"end_line":83}],"answer_points":["max_chunks_per_file","content_hash 去重"]}
 {"id":"rag-005","evidence":[{"path":"src/rag/retrieval/context_builder.py","start_line":8,"end_line":25}],"answer_points":["估算 token","达到预算停止"]}
 {"id":"rag-006","evidence":[{"path":"src/rag/generation/citation_validator.py","start_line":10,"end_line":30}],"answer_points":["仅接受 evidence_map 中的 ID","服务端映射"]}
 {"id":"rag-007","evidence":[{"path":"src/rag/generation/prompt_builder.py","start_line":6,"end_line":12}],"answer_points":["answer_system.txt","answer_context.txt"]}

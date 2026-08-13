@@ -75,13 +75,15 @@ class IngestionSettings(BaseModel):
 class RetrievalSettings(BaseModel):
     dense_top_k: int = 30
     lexical_top_k: int = 30
-    fused_top_k: int = 20
+    fused_top_k: int = 50
     final_top_k: int = 8
     rrf_k: int = 60
     max_chunks_per_file: int = 3
     context_token_budget: int = 8_000
     exact_symbol_boost: float = 0.02
     exact_path_boost: float = 0.01
+    class_module_boost: float = 0.02
+    declaration_stub_penalty: float = 0.02
 
 
 class SecuritySettings(BaseModel):

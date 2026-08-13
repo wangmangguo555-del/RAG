@@ -67,10 +67,10 @@ Uvicorn smoke         live=200、ready=200、OpenAPI 正常
 |---|---:|---:|
 | Dense-only | 0.756 | 0.402 |
 | Lexical-only | 0.778 | 0.450 |
-| Hybrid + 精确路径/符号提升 | 0.956 | 0.555 |
+| Hybrid + 精确路径/符号/类模块提升 | 0.956 | 0.619 |
 
 Hybrid 已达到 Recall@10 ≥ 0.85 的建议门槛，但 MRR@10 尚未达到 0.65。下一轮应优先检查
-精确符号题的切分与排序，并评估邻接扩展或轻量 reranker；不应仅为提高指标放宽 secret 过滤。
+剩余低排名题，并评估邻接扩展或轻量 reranker；不应仅为提高指标放宽 secret 过滤。
 
 初始端到端 smoke 使用的临时 collection、alias、仓库注册和 fixture `.git` 均已清理；
 当前 SQLite/Qdrant 已保存 `rag-project` 与 `vue-guide-cn` 的正式本地索引。

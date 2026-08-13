@@ -52,13 +52,15 @@ ingestion:
 retrieval:
   dense_top_k: 30
   lexical_top_k: 30
-  fused_top_k: 20
+  fused_top_k: 50
   final_top_k: 8
   rrf_k: 60
   max_chunks_per_file: 3
   context_token_budget: 8000
   exact_symbol_boost: 0.02
   exact_path_boost: 0.01
+  class_module_boost: 0.02
+  declaration_stub_penalty: 0.02
 
 security:
   redact_secrets: true
