@@ -80,6 +80,8 @@ class RetrievalSettings(BaseModel):
     rrf_k: int = 60
     max_chunks_per_file: int = 3
     context_token_budget: int = 8_000
+    exact_symbol_boost: float = 0.02
+    exact_path_boost: float = 0.01
 
 
 class SecuritySettings(BaseModel):

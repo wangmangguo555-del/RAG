@@ -4,7 +4,9 @@ import asyncio
 import json
 import os
 import sys
+from functools import partial
 from pathlib import Path
+from typing import Literal, cast
 
 import typer
 
@@ -178,22 +180,27 @@ def evaluate(
     ),
     top_k: int = typer.Option(10, min=1),
     repo_id: str | None = typer.Option(None, "--repo"),
+    mode: str = typer.Option("hybrid", help="Retrieval mode: hybrid, dense, or lexical"),
 ) -> None:
     """Evaluate retrieval against annotated evidence without invoking the LLM."""
 
     async def run() -> None:
+        if mode not in {"hybrid", "dense", "lexical"}:
+            raise typer.BadParameter("must be hybrid, dense, or lexical", param_hint="--mode")
+        retrieval_mode = cast(Literal["hybrid", "dense", "lexical"], mode)
         cases = load_evaluation_cases(questions, expected)
         container = _build_container()
         try:
             await container.metadata.initialize()
             report = await evaluate_retrieval(
                 cases,
-                container.query_service.search,
+                partial(container.query_service.search, mode=retrieval_mode),
                 top_k=top_k,
                 repo_id_override=repo_id,
                 configuration={
                     "embedding_fingerprint": container.settings.embedding.fingerprint,
                     "chunker_version": container.settings.ingestion.chunker_version,
+                    "mode": retrieval_mode,
                     "retrieval": container.settings.retrieval.model_dump(mode="json"),
                 },
             )

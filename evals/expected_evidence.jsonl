@@ -1,4 +1,50 @@
-{"id":"sample-001","evidence":[{"path":"README.md","start_line":5,"end_line":8},{"path":"src/auth.py","start_line":15,"end_line":21}],"answer_points":["令牌已撤销","过期时间已到"]}
-{"id":"sample-002","evidence":[{"path":"README.md","start_line":7,"end_line":8},{"path":"src/auth.py","start_line":5,"end_line":6},{"path":"src/auth.py","start_line":19,"end_line":20}],"answer_points":["TokenExpiredError"]}
-{"id":"sample-003","evidence":[{"path":"src/auth.py","start_line":15,"end_line":18}],"answer_points":["返回 False"]}
-{"id":"sample-004","evidence":[],"answer_points":[],"notes":"明确无答案，用于后续生成评估；检索 Recall/MRR 不计分"}
+{"id":"rag-001","evidence":[{"path":"README.md","start_line":1,"end_line":32}],"answer_points":["本地知识检索与问答","FastAPI","llama.cpp","Qdrant","SQLite FTS5"]}
+{"id":"rag-002","evidence":[{"path":"src/rag/application/query_service.py","start_line":41,"end_line":73},{"path":"README.md","start_line":295,"end_line":326}],"answer_points":["asyncio.gather","dense tasks","lexical task"]}
+{"id":"rag-003","evidence":[{"path":"src/rag/retrieval/fusion.py","start_line":10,"end_line":29},{"path":"README.md","start_line":313,"end_line":319}],"answer_points":["按排名融合","1/(k+rank)"]}
+{"id":"rag-004","evidence":[{"path":"src/rag/retrieval/fusion.py","start_line":32,"end_line":50}],"answer_points":["max_chunks_per_file","content_hash 去重"]}
+{"id":"rag-005","evidence":[{"path":"src/rag/retrieval/context_builder.py","start_line":8,"end_line":25}],"answer_points":["估算 token","达到预算停止"]}
+{"id":"rag-006","evidence":[{"path":"src/rag/generation/citation_validator.py","start_line":10,"end_line":30}],"answer_points":["仅接受 evidence_map 中的 ID","服务端映射"]}
+{"id":"rag-007","evidence":[{"path":"src/rag/generation/prompt_builder.py","start_line":6,"end_line":12}],"answer_points":["answer_system.txt","answer_context.txt"]}
+{"id":"rag-008","evidence":[{"path":"src/rag/application/index_service.py","start_line":47,"end_line":52}],"answer_points":["显式 ref","repository.default_ref"]}
+{"id":"rag-009","evidence":[{"path":"src/rag/application/index_service.py","start_line":53,"end_line":151},{"path":"README.md","start_line":261,"end_line":294},{"path":"LOCAL_RAG_ARCHITECTURE_AND_DEVELOPMENT_PLAN.md","start_line":367,"end_line":402}],"answer_points":["解析版本","过滤切分","Embedding","写入 Qdrant 和 SQLite","发布"]}
+{"id":"rag-010","evidence":[{"path":"src/rag/application/index_service.py","start_line":53,"end_line":78},{"path":"README.md","start_line":288,"end_line":294}],"answer_points":["find_published_snapshot","reused_snapshot"]}
+{"id":"rag-011","evidence":[{"path":"src/rag/ingestion/discovery.py","start_line":1,"end_line":116},{"path":"README.md","start_line":236,"end_line":260},{"path":"LOCAL_RAG_ARCHITECTURE_AND_DEVELOPMENT_PLAN.md","start_line":148,"end_line":169}],"answer_points":["生成目录","二进制","大小限制","ragignore"]}
+{"id":"rag-012","evidence":[{"path":"src/rag/ingestion/discovery.py","start_line":85,"end_line":124},{"path":"README.md","start_line":236,"end_line":260}],"answer_points":["binary extension","NUL byte","UTF 解码失败"]}
+{"id":"rag-013","evidence":[{"path":"src/rag/ingestion/discovery.py","start_line":126,"end_line":157}],"answer_points":["secret patterns","高熵 token"]}
+{"id":"rag-014","evidence":[{"path":"src/rag/ingestion/discovery.py","start_line":158,"end_line":159},{"path":"LOCAL_RAG_ARCHITECTURE_AND_DEVELOPMENT_PLAN.md","start_line":148,"end_line":169}],"answer_points":["文件扩展名映射"]}
+{"id":"rag-015","evidence":[{"path":"src/rag/ingestion/chunkers/structured.py","start_line":79,"end_line":106}],"answer_points":["Markdown headings","章节边界"]}
+{"id":"rag-016","evidence":[{"path":"src/rag/ingestion/chunkers/structured.py","start_line":32,"end_line":78},{"path":"README.md","start_line":251,"end_line":259}],"answer_points":["sha256","UUIDv5","路径和行号"]}
+{"id":"rag-017","evidence":[{"path":"src/rag/ingestion/git_source.py","start_line":11,"end_line":19}],"answer_points":["git rev-parse","commit object"]}
+{"id":"rag-018","evidence":[{"path":"src/rag/ingestion/git_source.py","start_line":20,"end_line":38}],"answer_points":["git ls-tree","blob mode"]}
+{"id":"rag-019","evidence":[{"path":"README.md","start_line":506,"end_line":514},{"path":"src/rag/ingestion/git_source.py","start_line":43,"end_line":65}],"answer_points":["不执行代码","不运行 hook"]}
+{"id":"rag-020","evidence":[{"path":"src/rag/ingestion/web_source.py","start_line":162,"end_line":180}],"answer_points":["HTTPS","禁止 IP","host allowlist"]}
+{"id":"rag-021","evidence":[{"path":"src/rag/ingestion/web_source.py","start_line":19,"end_line":101},{"path":"tests/unit/test_web_source.py","start_line":10,"end_line":24}],"answer_points":["优先 main","回退整个页面"]}
+{"id":"rag-022","evidence":[{"path":"src/rag/ingestion/source_router.py","start_line":9,"end_line":31}],"answer_points":["SourceType.WEB_PAGE","Git source"]}
+{"id":"rag-023","evidence":[{"path":"src/rag/infrastructure/qdrant_store.py","start_line":17,"end_line":96}],"answer_points":["active_alias_template","删除旧 alias","创建新 alias"]}
+{"id":"rag-024","evidence":[{"path":"src/rag/infrastructure/qdrant_store.py","start_line":97,"end_line":146},{"path":"LOCAL_RAG_ARCHITECTURE_AND_DEVELOPMENT_PLAN.md","start_line":241,"end_line":273}],"answer_points":["language","path prefix"]}
+{"id":"rag-025","evidence":[{"path":"src/rag/infrastructure/sqlite_store.py","start_line":33,"end_line":79}],"answer_points":["WAL","foreign_keys","busy_timeout"]}
+{"id":"rag-026","evidence":[{"path":"migrations/002_pinyin_initial_columns.sql","start_line":1,"end_line":79},{"path":"DATABASE_SCHEMA_PINYIN.md","start_line":1,"end_line":30}],"answer_points":["中文业务含义拼音首字母","领域模型和 API 不变"]}
+{"id":"rag-027","evidence":[{"path":"migrations/001_initial.sql","start_line":64,"end_line":72},{"path":"migrations/002_pinyin_initial_columns.sql","start_line":53,"end_line":64},{"path":"DATABASE_SCHEMA_PINYIN.md","start_line":162,"end_line":178}],"answer_points":["chunk ID","snapshot ID","repo ID","path","symbol","content"]}
+{"id":"rag-028","evidence":[{"path":"src/rag/application/query_service.py","start_line":41,"end_line":55},{"path":"src/rag/infrastructure/sqlite_store.py","start_line":299,"end_line":310}],"answer_points":["get_published_snapshot","status published"]}
+{"id":"rag-029","evidence":[{"path":"src/rag/infrastructure/sqlite_store.py","start_line":167,"end_line":188}],"answer_points":["BEGIN IMMEDIATE","pending","running"]}
+{"id":"rag-030","evidence":[{"path":"src/rag/api/dependencies.py","start_line":15,"end_line":21}],"answer_points":["Bearer token","constant-time compare","401"]}
+{"id":"rag-031","evidence":[{"path":"src/rag/api/query_routes.py","start_line":26,"end_line":50},{"path":"src/rag/api/schemas.py","start_line":46,"end_line":62}],"answer_points":["answer","confidence","citations","snapshots","timing"]}
+{"id":"rag-032","evidence":[{"path":"src/rag/api/query_routes.py","start_line":26,"end_line":71},{"path":"README.md","start_line":442,"end_line":456}],"answer_points":["search 只返回证据","query 调用生成模型"]}
+{"id":"rag-033","evidence":[{"path":"src/rag/api/app.py","start_line":77,"end_line":94},{"path":"LOCAL_RAG_ENVIRONMENT_AND_APPLICATIONS.md","start_line":684,"end_line":690}],"answer_points":["SQLite","Qdrant","LLM","Embedding"]}
+{"id":"rag-034","evidence":[{"path":"src/rag/cli/main.py","start_line":71,"end_line":95}],"answer_points":["id","path","name","ref","working_tree"]}
+{"id":"rag-035","evidence":[{"path":"src/rag/cli/main.py","start_line":161,"end_line":219},{"path":"README.md","start_line":404,"end_line":420}],"answer_points":["Evidence Recall@K","MRR@K","不调用 LLM"]}
+{"id":"rag-036","evidence":[{"path":"src/rag/cli/main.py","start_line":222,"end_line":243}],"answer_points":["SQLite","Qdrant","LLM","Embedding"]}
+{"id":"rag-037","evidence":[{"path":"config/default.yaml","start_line":7,"end_line":14},{"path":"src/rag/infrastructure/settings.py","start_line":18,"end_line":37},{"path":"src/rag/infrastructure/settings.py","start_line":92,"end_line":100},{"path":"LOCAL_RAG_ENVIRONMENT_AND_APPLICATIONS.md","start_line":279,"end_line":329}],"answer_points":["127.0.0.1:8080/v1","180 秒","1024"]}
+{"id":"rag-038","evidence":[{"path":"config/default.yaml","start_line":16,"end_line":24},{"path":"README.md","start_line":480,"end_line":487}],"answer_points":["区分向量语义空间","切换模型更新 fingerprint","重建索引"]}
+{"id":"rag-039","evidence":[{"path":"config/default.yaml","start_line":52,"end_line":59},{"path":"src/rag/infrastructure/settings.py","start_line":75,"end_line":84},{"path":"README.md","start_line":313,"end_line":326}],"answer_points":["30","30","20","8"]}
+{"id":"rag-040","evidence":[{"path":"config/default.yaml","start_line":61,"end_line":65},{"path":"README.md","start_line":462,"end_line":466}],"answer_points":["change-me-local-admin-token","实际使用前替换"]}
+{"id":"rag-041","evidence":[{"path":"src/rag/domain/models.py","start_line":8,"end_line":13}],"answer_points":["working_tree","local_mirror","remote_clone","web_page"]}
+{"id":"rag-042","evidence":[{"path":"src/rag/domain/models.py","start_line":15,"end_line":29}],"answer_points":["pending","running","validating","published","failed","superseded","succeeded"]}
+{"id":"rag-043","evidence":[{"path":"src/rag/domain/errors.py","start_line":20,"end_line":28}],"answer_points":["MODEL_UNAVAILABLE","retryable true"]}
+{"id":"rag-044","evidence":[{"path":"src/rag/domain/errors.py","start_line":29,"end_line":35},{"path":"src/rag/application/query_service.py","start_line":49,"end_line":55}],"answer_points":["NoPublishedSnapshotError","NO_PUBLISHED_SNAPSHOT"]}
+{"id":"rag-045","evidence":[{"path":"src/rag/container.py","start_line":19,"end_line":68}],"answer_points":["adapters","IndexService","QueryService","PromptBuilder"]}
+{"id":"rag-046","evidence":[],"answer_points":[],"notes":"明确无答案：仓库中没有前端管理界面实现"}
+{"id":"rag-047","evidence":[],"answer_points":[],"notes":"明确无答案：当前网页源只支持单页静态 HTML"}
+{"id":"rag-048","evidence":[],"answer_points":[],"notes":"明确无答案：当前不解析 PDF 或 Office 文档"}
+{"id":"rag-049","evidence":[],"answer_points":[],"notes":"明确无答案：任务队列由 SQLite 实现"}
+{"id":"rag-050","evidence":[],"answer_points":[],"notes":"明确无答案：项目没有 Helm Chart"}

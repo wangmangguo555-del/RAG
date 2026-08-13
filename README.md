@@ -317,8 +317,9 @@ score(document) = Σ 1 / (rrf_k + rank_i(document))
 ```
 
 默认检索参数位于 `config/default.yaml`：Dense 30、FTS5 30、融合 20、最终 8，且每个
-文件最多保留 3 个 chunk。上下文采用带边界的 `<evidence>` 块，仓库内容只被视为资料，
-不被视为系统指令。
+文件最多保留 3 个 chunk。问题中出现 `QueryService`、`default.yaml` 等明确代码标识符时，
+融合结果会施加小幅、确定性的精确符号/路径提升；普通自然语言单词不触发该提升。上下文采用
+带边界的 `<evidence>` 块，仓库内容只被视为资料，不被视为系统指令。
 
 模型只能引用本轮上下文中存在的 `E1`、`E2` 等 ID。服务端从 evidence map 生成真实
 repo、版本、路径、行号和 snippet；如果没有合法引用，则返回低置信度的“证据不足”，
@@ -416,8 +417,10 @@ uv run ragctl evaluate
 
 命令计算 Evidence Recall@10 和 MRR@10，不调用生成模型；逐题命中排名、候选证据以及
 Embedding fingerprint、chunker version 和检索参数写入
-`data/evals/retrieval-latest.json`。使用其他仓库验证示例标注时可传入
-`--repo <repo-id>`，使用 `--top-k` 调整评估截断位置。
+`data/evals/retrieval-latest.json`。使用其他仓库验证标注时可传入
+`--repo <repo-id>`，使用 `--top-k` 调整评估截断位置。A/B 检索时使用
+`--mode dense`、`--mode lexical` 或默认的 `--mode hybrid`；三种模式使用相同评估集，
+便于判断增益来自稠密检索、关键词检索还是融合。
 
 ### 6.3 HTTPS 单页知识源
 

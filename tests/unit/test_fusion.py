@@ -1,5 +1,7 @@
+from dataclasses import replace
+
 from rag.domain.models import SearchHit
-from rag.retrieval.fusion import diversify, reciprocal_rank_fusion
+from rag.retrieval.fusion import boost_exact_matches, diversify, reciprocal_rank_fusion
 
 
 def _hit(chunk_id: str, path: str, source: str) -> SearchHit:
@@ -37,3 +39,33 @@ def test_diversify_limits_per_file() -> None:
         max_chunks_per_file=1,
     )
     assert [hit.chunk_id for hit in selected] == ["a", "c"]
+
+
+def test_exact_symbol_and_path_matches_are_boosted() -> None:
+    symbol_hit = _hit("symbol", "src/service.py", "dense")
+    symbol_hit = replace(symbol_hit, symbol="QueryService")
+    path_hit = _hit("path", "config/default.yaml", "dense")
+    unrelated = _hit("other", "README.md", "dense")
+
+    boosted = boost_exact_matches(
+        [unrelated, path_hit, symbol_hit],
+        "QueryService 如何读取 default.yaml？",
+        symbol_boost=0.02,
+        path_boost=0.01,
+    )
+
+    assert [hit.chunk_id for hit in boosted] == ["symbol", "path", "other"]
+
+
+def test_plain_words_do_not_trigger_symbol_boost() -> None:
+    chunk_hit = replace(_hit("chunk", "src/models.py", "dense"), symbol="Chunk")
+    first = _hit("first", "README.md", "dense")
+
+    boosted = boost_exact_matches(
+        [first, chunk_hit],
+        "如何限制同一个文件的 chunk 数量？",
+        symbol_boost=0.02,
+        path_boost=0.01,
+    )
+
+    assert [hit.chunk_id for hit in boosted] == ["first", "chunk"]

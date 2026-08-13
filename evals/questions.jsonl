@@ -1,4 +1,50 @@
-{"id":"sample-001","question":"刷新令牌在什么情况下会被拒绝？","repo_id":"sample-repo","should_answer":true}
-{"id":"sample-002","question":"过期的刷新令牌会抛出什么异常？","repo_id":"sample-repo","should_answer":true}
-{"id":"sample-003","question":"validate_refresh_token 如何处理被撤销的令牌？","repo_id":"sample-repo","should_answer":true}
-{"id":"sample-004","question":"这个示例仓库使用哪一种数据库？","repo_id":"sample-repo","should_answer":false}
+{"id":"rag-001","question":"Local RAG 项目的核心职责和主要技术组件是什么？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-002","question":"QueryService 如何同时执行稠密检索和关键词检索？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-003","question":"系统为什么使用 RRF 融合，具体如何计算融合分数？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-004","question":"检索结果如何限制同一文件占用过多 chunk？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-005","question":"证据上下文如何受 token budget 限制？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-006","question":"生成结果中的引用 ID 如何被校验并映射到真实证据？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-007","question":"PromptBuilder 从哪里读取系统提示词和上下文模板？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-008","question":"提交索引任务时 IndexService 如何确定 requested ref？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-009","question":"IndexService 执行索引任务的主要步骤是什么？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-010","question":"同一 commit 和 index version 已发布时如何复用 snapshot？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-011","question":"文件发现阶段默认过滤哪些路径或文件？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-012","question":"二进制或无法解码的内容如何被拒绝？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-013","question":"系统如何检测并跳过可能包含密钥的文本？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-014","question":"文件语言是根据什么规则识别的？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-015","question":"StructuredChunker 如何按 Markdown 标题切分文档？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-016","question":"chunk_id 和 point_id 如何保证重复索引时保持确定性？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-017","question":"本地 Git 数据源如何把分支或 HEAD 解析为 commit SHA？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-018","question":"本地 Git 数据源如何枚举指定 commit 中的 blob？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-019","question":"索引 Git 仓库时是否会执行其中的代码、脚本或 hook？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-020","question":"网页知识源如何限制协议、IP 地址和允许的主机？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-021","question":"网页正文提取为什么优先选择 main 元素？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-022","question":"SourceRouter 如何在 Git 与网页 adapter 之间选择？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-023","question":"Qdrant active alias 如何命名和切换？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-024","question":"Qdrant 稠密搜索支持哪些过滤条件？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-025","question":"SQLite 初始化时启用了哪些可靠性和并发设置？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-026","question":"数据库第二个迁移为什么将字段改为拼音首字母？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-027","question":"SQLite FTS5 索引保存哪些 chunk 字段？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-028","question":"查询如何只选择 published snapshot？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-029","question":"Worker 如何原子领取下一个 pending 索引任务？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-030","question":"管理 API 如何校验 Bearer token？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-031","question":"POST /api/v1/query 返回哪些主要字段？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-032","question":"POST /api/v1/search 与 query 接口有什么区别？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-033","question":"readiness 健康检查会检查哪些依赖？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-034","question":"ragctl register-repo 需要哪些参数并保存什么知识源信息？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-035","question":"ragctl evaluate 计算哪些指标，是否会调用生成模型？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-036","question":"ragctl doctor 会检查哪些本地服务？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-037","question":"默认 LLM 服务地址、超时和最大输出 token 是多少？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-038","question":"Embedding fingerprint 有什么作用，切换模型时应如何处理？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-039","question":"默认 dense、lexical、fused 和 final top-k 分别是多少？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-040","question":"默认管理员 token 是什么，实际使用前应注意什么？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-041","question":"领域模型定义了哪些 SourceType？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-042","question":"SnapshotStatus 和 JobStatus 分别包含哪些状态？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-043","question":"模型服务不可用时使用什么错误码，是否可重试？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-044","question":"没有 published snapshot 时系统抛出什么错误？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-045","question":"Container 如何装配索引服务和查询服务的依赖？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-046","question":"项目是否已经提供 React 或 Vue 前端管理界面？","repo_id":"rag-project","should_answer":false}
+{"id":"rag-047","question":"项目是否支持递归抓取整个网站并执行 JavaScript 渲染？","repo_id":"rag-project","should_answer":false}
+{"id":"rag-048","question":"项目是否已经实现 PDF 和 Office 文档解析？","repo_id":"rag-project","should_answer":false}
+{"id":"rag-049","question":"项目是否已经集成 Redis 作为任务队列？","repo_id":"rag-project","should_answer":false}
+{"id":"rag-050","question":"项目是否已经提供 Kubernetes Helm Chart？","repo_id":"rag-project","should_answer":false}

@@ -57,7 +57,23 @@ ragctl doctor         SQLite/Qdrant/LLM/Embedding 全部 OK
 Uvicorn smoke         live=200、ready=200、OpenAPI 正常
 ```
 
-端到端 smoke collection、alias、临时仓库注册和 fixture `.git` 均已清理。Qdrant 最终为零 collection，SQLite 保留空的已迁移数据库。
+检索评估入口已使用当前项目自身建立 50 条专属问题，其中 45 条可回答、5 条明确无答案。
+评估支持 dense-only、lexical-only 和 hybrid 三种模式，并记录 Evidence Recall@K、MRR@K、
+逐题候选及配置指纹，作为后续切分、召回和排序优化的可复现基线。
+
+2026-08-13 在本地 `rag-project` 已发布快照上得到的 Recall@10 / MRR@10 为：
+
+| 模式 | Recall@10 | MRR@10 |
+|---|---:|---:|
+| Dense-only | 0.756 | 0.402 |
+| Lexical-only | 0.778 | 0.450 |
+| Hybrid + 精确路径/符号提升 | 0.956 | 0.555 |
+
+Hybrid 已达到 Recall@10 ≥ 0.85 的建议门槛，但 MRR@10 尚未达到 0.65。下一轮应优先检查
+精确符号题的切分与排序，并评估邻接扩展或轻量 reranker；不应仅为提高指标放宽 secret 过滤。
+
+初始端到端 smoke 使用的临时 collection、alias、仓库注册和 fixture `.git` 均已清理；
+当前 SQLite/Qdrant 已保存 `rag-project` 与 `vue-guide-cn` 的正式本地索引。
 
 ## 4. 关键设计结果
 

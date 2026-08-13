@@ -57,6 +57,8 @@ retrieval:
   rrf_k: 60
   max_chunks_per_file: 3
   context_token_budget: 8000
+  exact_symbol_boost: 0.02
+  exact_path_boost: 0.01
 
 security:
   redact_secrets: true

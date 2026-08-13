@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Literal
 
 from rag.domain.errors import NoPublishedSnapshotError
 from rag.domain.models import Chunk, QueryResult, SearchFilter, SearchHit
@@ -16,7 +17,7 @@ from rag.generation.citation_validator import validate_citations
 from rag.generation.prompt_builder import PromptBuilder
 from rag.infrastructure.settings import RetrievalSettings
 from rag.retrieval.context_builder import build_context
-from rag.retrieval.fusion import diversify, reciprocal_rank_fusion
+from rag.retrieval.fusion import boost_exact_matches, diversify, reciprocal_rank_fusion
 
 
 class QueryService:
@@ -39,7 +40,11 @@ class QueryService:
         self.settings = settings
 
     async def search(
-        self, question: str, filters: SearchFilter, final_k: int | None = None
+        self,
+        question: str,
+        filters: SearchFilter,
+        final_k: int | None = None,
+        mode: Literal["hybrid", "dense", "lexical"] = "hybrid",
     ) -> list[SearchHit]:
         repo_ids = filters.repo_ids or tuple(
             repo.id for repo in await self.metadata.list_repositories()
@@ -52,27 +57,38 @@ class QueryService:
         if not snapshots:
             raise NoPublishedSnapshotError("no repository has a published snapshot")
 
-        vector = await self.embedding.embed_query(question)
-        dense_tasks = [
-            self.vectors.search(repo_id, vector, filters, self.settings.dense_top_k)
-            for repo_id in snapshots
-        ]
-        lexical_task = self.lexical.search_lexical(
-            question,
-            list(snapshots.values()),
-            filters,
-            self.settings.lexical_top_k,
-        )
-        results = await asyncio.gather(*dense_tasks, lexical_task)
-        dense_hits = [hit for result in results[:-1] for hit in result]
-        lexical_hits = results[-1]
+        dense_hits: list[SearchHit] = []
+        lexical_hits: list[SearchHit] = []
+        if mode in {"hybrid", "dense"}:
+            vector = await self.embedding.embed_query(question)
+            dense_results = await asyncio.gather(
+                *[
+                    self.vectors.search(repo_id, vector, filters, self.settings.dense_top_k)
+                    for repo_id in snapshots
+                ]
+            )
+            dense_hits = [hit for result in dense_results for hit in result]
+        if mode in {"hybrid", "lexical"}:
+            lexical_hits = await self.lexical.search_lexical(
+                question,
+                list(snapshots.values()),
+                filters,
+                self.settings.lexical_top_k,
+            )
+        ranked_lists = [hits for hits in (dense_hits, lexical_hits) if hits]
         fused = reciprocal_rank_fusion(
-            [dense_hits, lexical_hits], k=self.settings.rrf_k, limit=self.settings.fused_top_k
+            ranked_lists, k=self.settings.rrf_k, limit=self.settings.fused_top_k
         )
         chunk_map = await self.metadata.get_chunks([hit.chunk_id for hit in fused])
         hydrated = [self._hydrate(hit, chunk_map) for hit in fused if hit.chunk_id in chunk_map]
-        return diversify(
+        boosted = boost_exact_matches(
             hydrated,
+            question,
+            symbol_boost=self.settings.exact_symbol_boost,
+            path_boost=self.settings.exact_path_boost,
+        )
+        return diversify(
+            boosted,
             final_k=final_k or self.settings.final_top_k,
             max_chunks_per_file=self.settings.max_chunks_per_file,
         )
