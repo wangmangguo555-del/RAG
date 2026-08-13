@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
@@ -17,6 +17,9 @@ from rag.domain.models import (
     Repository,
     SearchFilter,
     SearchHit,
+    SnapshotGcCandidate,
+    SnapshotRef,
+    SnapshotStatus,
     SourceType,
 )
 from rag.infrastructure.settings import SqliteSettings
@@ -28,6 +31,10 @@ def _now() -> str:
 
 def _id() -> str:
     return str(ulid.new())
+
+
+def _after(seconds: float) -> str:
+    return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
 
 
 class SqliteStore:
@@ -162,13 +169,21 @@ class SqliteStore:
             resolved_commit_sha=row["yjxbbhs"],
             error_code=row["cwdm"],
             error_message=row["cwxx"],
+            attempt=int(row["cscs"]),
+            next_retry_at=row["xccssj"],
+            snapshot_id=row["kzbh"],
         )
 
     async def claim_next_job(self) -> IndexJob | None:
         async with self._connect() as connection:
             await connection.execute("BEGIN IMMEDIATE")
             cursor = await connection.execute(
-                "SELECT * FROM index_jobs WHERE zt='pending' ORDER BY cjsj LIMIT 1"
+                """
+                SELECT * FROM index_jobs
+                WHERE zt='pending' AND (xccssj IS NULL OR xccssj <= ?)
+                ORDER BY cjsj LIMIT 1
+                """,
+                (_now(),),
             )
             row = await cursor.fetchone()
             if not row:
@@ -177,14 +192,139 @@ class SqliteStore:
             await connection.execute(
                 """
                 UPDATE index_jobs SET zt='running', cscs=cscs+1,
-                    kssj=?, xtsj=? WHERE bh=? AND zt='pending'
+                    kssj=COALESCE(kssj,?), xtsj=?, xccssj=NULL
+                WHERE bh=? AND zt='pending'
                 """,
                 (_now(), _now(), row["bh"]),
             )
             await connection.commit()
             updated = dict(row)
             updated["zt"] = JobStatus.RUNNING.value
+            updated["cscs"] = int(row["cscs"]) + 1
+            updated["xccssj"] = None
             return self._job_from_row(updated)
+
+    async def record_job_commit(self, job_id: str, commit_sha: str) -> None:
+        async with self._connect() as connection:
+            await connection.execute(
+                "UPDATE index_jobs SET yjxbbhs=?, xtsj=? WHERE bh=?",
+                (commit_sha, _now(), job_id),
+            )
+            await connection.commit()
+
+    async def record_job_snapshot(self, job_id: str, snapshot_id: str) -> None:
+        async with self._connect() as connection:
+            await connection.execute(
+                "UPDATE index_jobs SET kzbh=?, xtsj=? WHERE bh=?",
+                (snapshot_id, _now(), job_id),
+            )
+            await connection.commit()
+
+    async def heartbeat_job(self, job_id: str) -> None:
+        async with self._connect() as connection:
+            await connection.execute(
+                "UPDATE index_jobs SET xtsj=? WHERE bh=? AND zt='running'", (_now(), job_id)
+            )
+            await connection.commit()
+
+    async def recover_stale_jobs(self, stale_before: str, max_attempts: int) -> dict[str, int]:
+        """恢复失联任务，并单独收口已经发布成功的任务。
+
+        Worker 可能在 SQLite 发布事务提交后、写 job succeeded 前退出。此时发布快照
+        已经是用户可见事实，恢复逻辑只能补记成功，不能重新构建或降级快照。
+        """
+
+        recovered = 0
+        completed = 0
+        failed = 0
+        now = _now()
+        async with self._connect() as connection:
+            await connection.execute("BEGIN IMMEDIATE")
+            cursor = await connection.execute(
+                """
+                SELECT * FROM index_jobs
+                WHERE zt='running' AND (xtsj IS NULL OR xtsj < ?)
+                ORDER BY cjsj
+                """,
+                (stale_before,),
+            )
+            for row in await cursor.fetchall():
+                published = None
+                if row["kzbh"]:
+                    published_cursor = await connection.execute(
+                        "SELECT 1 FROM snapshots WHERE bh=? AND zt='published'",
+                        (row["kzbh"],),
+                    )
+                    published = await published_cursor.fetchone()
+                if published:
+                    await connection.execute(
+                        """
+                        UPDATE index_jobs SET zt='succeeded', jssj=?, xtsj=?,
+                            cwdm=NULL, cwxx=NULL, xccssj=NULL WHERE bh=?
+                        """,
+                        (now, now, row["bh"]),
+                    )
+                    completed += 1
+                elif int(row["cscs"]) < max_attempts:
+                    await connection.execute(
+                        """
+                        UPDATE index_jobs SET zt='pending', xtsj=?, xccssj=NULL,
+                            cwdm='STALE_JOB_RECOVERED', cwxx='Worker 心跳超时，任务已重新入队'
+                        WHERE bh=?
+                        """,
+                        (now, row["bh"]),
+                    )
+                    recovered += 1
+                else:
+                    await connection.execute(
+                        """
+                        UPDATE index_jobs SET zt='failed', jssj=?, xtsj=?, xccssj=NULL,
+                            cwdm='MAX_ATTEMPTS_EXCEEDED', cwxx='Worker 心跳超时且已达到最大尝试次数'
+                        WHERE bh=?
+                        """,
+                        (now, now, row["bh"]),
+                    )
+                    failed += 1
+            await connection.commit()
+        return {"recovered": recovered, "completed": completed, "failed": failed}
+
+    async def retry_or_fail_job(
+        self,
+        job_id: str,
+        *,
+        retryable: bool,
+        max_attempts: int,
+        retry_delay_seconds: float,
+        error_code: str,
+        error_message: str,
+    ) -> str:
+        async with self._connect() as connection:
+            cursor = await connection.execute(
+                "SELECT cscs FROM index_jobs WHERE bh=?", (job_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                raise ValueError(f"job not found: {job_id}")
+            should_retry = retryable and int(row["cscs"]) < max_attempts
+            status = JobStatus.PENDING if should_retry else JobStatus.FAILED
+            now = _now()
+            await connection.execute(
+                """
+                UPDATE index_jobs SET zt=?, cwdm=?, cwxx=?, xtsj=?,
+                    xccssj=?, jssj=? WHERE bh=?
+                """,
+                (
+                    status.value,
+                    error_code,
+                    error_message[:2000],
+                    now,
+                    _after(retry_delay_seconds) if should_retry else None,
+                    None if should_retry else now,
+                    job_id,
+                ),
+            )
+            await connection.commit()
+        return status.value
 
     async def get_job(self, job_id: str) -> IndexJob | None:
         async with self._connect() as connection:
@@ -206,7 +346,7 @@ class SqliteStore:
             await connection.execute(
                 """
                 UPDATE index_jobs SET zt=?, yjxbbhs=?, cwdm=?,
-                    cwxx=?, jssj=?, xtsj=? WHERE bh=?
+                    cwxx=?, xccssj=NULL, jssj=?, xtsj=? WHERE bh=?
                 """,
                 (status.value, commit_sha, error_code, error_message, _now(), _now(), job_id),
             )
@@ -223,12 +363,14 @@ class SqliteStore:
             )
             existing = await cursor.fetchone()
             if existing:
-                if existing["zt"] != "failed":
+                if existing["zt"] not in {"failed", "running"}:
                     raise ValueError(
                         f"snapshot already exists with status {existing['zt']}: {existing['bh']}"
                     )
                 snapshot_id = str(existing["bh"])
                 await connection.execute("BEGIN IMMEDIATE")
+                # 单 Worker 不存在合法的并发续建；running 表示上次进程在收口前退出，
+                # 当前实现没有批次 checkpoint，因此必须从空快照重新构建。
                 await connection.execute("DELETE FROM chunks_fts WHERE kzbh=?", (snapshot_id,))
                 await connection.execute("DELETE FROM chunks WHERE kzbh=?", (snapshot_id,))
                 await connection.execute("DELETE FROM files WHERE kzbh=?", (snapshot_id,))
@@ -291,7 +433,7 @@ class SqliteStore:
     async def fail_snapshot(self, snapshot_id: str, message: str) -> None:
         async with self._connect() as connection:
             await connection.execute(
-                "UPDATE snapshots SET zt='failed', cwxx=? WHERE bh=?",
+                "UPDATE snapshots SET zt='failed', cwxx=? WHERE bh=? AND zt<>'published'",
                 (message[:2000], snapshot_id),
             )
             await connection.commit()
@@ -307,6 +449,86 @@ class SqliteStore:
             )
             row = await cursor.fetchone()
             return row["bh"] if row else None
+
+    async def list_published_snapshots(self) -> list[SnapshotRef]:
+        async with self._connect() as connection:
+            cursor = await connection.execute(
+                "SELECT bh,zsybh,zt FROM snapshots WHERE zt='published' ORDER BY zsybh"
+            )
+            return [
+                SnapshotRef(
+                    id=str(row["bh"]),
+                    repo_id=str(row["zsybh"]),
+                    status=SnapshotStatus(str(row["zt"])),
+                )
+                for row in await cursor.fetchall()
+            ]
+
+    async def is_snapshot_published(self, snapshot_id: str) -> bool:
+        async with self._connect() as connection:
+            cursor = await connection.execute(
+                "SELECT 1 FROM snapshots WHERE bh=? AND zt='published'", (snapshot_id,)
+            )
+            return await cursor.fetchone() is not None
+
+    async def count_snapshot_chunks(self, snapshot_id: str) -> int:
+        async with self._connect() as connection:
+            cursor = await connection.execute(
+                "SELECT COUNT(*) FROM chunks WHERE kzbh=?", (snapshot_id,)
+            )
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    async def plan_snapshot_gc(
+        self,
+        *,
+        retain_successful: int,
+        superseded_before: str,
+        failed_before: str,
+    ) -> list[SnapshotGcCandidate]:
+        """生成保守的回收计划，不在该方法内执行删除。"""
+
+        if retain_successful < 1:
+            raise ValueError("retain_successful must be at least 1")
+        async with self._connect() as connection:
+            cursor = await connection.execute(
+                """
+                SELECT bh,zsybh,zt,cjsj,COALESCE(fbsj,cjsj) AS pxsj
+                FROM snapshots
+                WHERE zt='superseded' OR (zt='failed' AND cjsj < ?)
+                ORDER BY zsybh, pxsj DESC
+                """,
+                (failed_before,),
+            )
+            rows = await cursor.fetchall()
+
+        successful_seen: dict[str, int] = {}
+        candidates: list[SnapshotGcCandidate] = []
+        for row in rows:
+            repo_id = str(row["zsybh"])
+            status = SnapshotStatus(str(row["zt"]))
+            if status is SnapshotStatus.SUPERSEDED:
+                successful_seen[repo_id] = successful_seen.get(repo_id, 0) + 1
+                # published 快照计入保留总数，因此只额外保留 retain_successful - 1 个
+                # superseded 快照；未过宽限期的快照也必须参与名次计算。
+                if (
+                    str(row["pxsj"]) >= superseded_before
+                    or successful_seen[repo_id] < retain_successful
+                ):
+                    continue
+                reason = "超过成功快照保留数量且已过回收宽限期"
+            else:
+                reason = "失败快照已过诊断保留期"
+            snapshot_id = str(row["bh"])
+            candidates.append(
+                SnapshotGcCandidate(
+                    id=snapshot_id,
+                    repo_id=repo_id,
+                    status=status,
+                    reason=reason,
+                )
+            )
+        return candidates
 
     async def save_file(
         self,
@@ -339,7 +561,7 @@ class SqliteStore:
                     """
                     INSERT OR REPLACE INTO chunks(
                         bh,xldbh,kzbh,zsybh,bbhs,lj,yy,fh,jdlx,qsh,jsh,nr,xlwb,nrhs,
-                        sfcs,ysjj_json
+                        sfcs,ysj_json
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
@@ -407,7 +629,7 @@ class SqliteStore:
             symbol=row["fh"],
             node_type=row["jdlx"],
             is_test=bool(row["sfcs"]),
-            metadata=json.loads(row["ysjj_json"]),
+            metadata=json.loads(row["ysj_json"]),
         )
 
     async def search_lexical(
@@ -455,7 +677,7 @@ class SqliteStore:
                 symbol=row["fh"],
                 content=row["nr"],
                 content_hash=row["nrhs"],
-                metadata=json.loads(row["ysjj_json"]),
+                metadata=json.loads(row["ysj_json"]),
             )
             for row in rows
         ]

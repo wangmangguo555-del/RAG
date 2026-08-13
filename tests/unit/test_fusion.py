@@ -101,3 +101,27 @@ def test_class_query_prefers_implementation_over_declaration_stub() -> None:
 
     assert boosted[0].chunk_id == "implementation"
     assert boosted[-1].chunk_id == "declaration"
+
+
+def test_class_module_boost_is_not_tied_to_project_directory() -> None:
+    module = replace(
+        _hit("module", "packages/search/query_service.py", "dense"),
+        symbol="search",
+        content=(
+            "async def search(self):\n"
+            "    results = await self.backend.search()\n"
+            "    return results"
+        ),
+        score=0.02,
+    )
+    unrelated = replace(_hit("other", "docs/query.md", "dense"), score=0.03)
+
+    boosted = boost_exact_matches(
+        [unrelated, module],
+        "QueryService 如何检索？",
+        symbol_boost=0.02,
+        path_boost=0.01,
+        class_module_boost=0.02,
+    )
+
+    assert boosted[0].chunk_id == "module"

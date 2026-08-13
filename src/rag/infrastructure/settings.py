@@ -46,7 +46,6 @@ class EmbeddingSettings(ModelEndpointSettings):
 class QdrantSettings(BaseModel):
     url: str = "http://127.0.0.1:6333"
     api_key: str | None = None
-    active_alias_template: str = "repo_{repo_id}__active"
     distance: str = "cosine"
 
 
@@ -57,7 +56,14 @@ class SqliteSettings(BaseModel):
 
 
 class IngestionSettings(BaseModel):
-    worker_poll_seconds: float = 2.0
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
+    worker_heartbeat_seconds: float = Field(default=10.0, gt=0)
+    job_stale_after_seconds: float = Field(default=300.0, gt=0)
+    job_max_attempts: int = Field(default=3, ge=1)
+    job_retry_base_seconds: float = Field(default=5.0, ge=0)
+    snapshot_retained_successful: int = Field(default=3, ge=1)
+    snapshot_superseded_grace_seconds: float = Field(default=86_400.0, ge=0)
+    snapshot_failed_grace_seconds: float = Field(default=604_800.0, ge=0)
     max_file_bytes: int = 1_048_576
     embedding_batch_size: int = 8
     chunk_target_tokens: int = 500

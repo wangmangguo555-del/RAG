@@ -107,7 +107,7 @@ raw_vector_bytes = chunk_count × embedding_dimension × 4
 数据盘规划值 >= 模型文件 + 仓库 + 完整索引实测值 × 2.5 + 备份保留量
 ```
 
-`× 2.5` 用于覆盖 active collection、待发布 collection、回滚版本和构建临时空间，不是 Qdrant 的固定放大率。
+`× 2.5` 用于覆盖 published collection、待发布 collection、回滚版本和构建临时空间，不是 Qdrant 的固定放大率。
 
 ### 3.3 GPU 与驱动
 
@@ -382,7 +382,7 @@ $embeddingResponse.data[0].embedding.Count
 
 - 保存 chunk 的稠密向量和 repo/path/symbol/snapshot 等 payload。
 - 执行 cosine/dot-product 近邻检索及 metadata filter。
-- 通过每仓库 active alias 完成 snapshot 原子切换和回滚。
+- 每个 snapshot 使用独立不可变 collection；由 SQLite `published` 状态完成原子发布和回滚。
 
 **Windows 推荐安装路径**
 
@@ -470,7 +470,7 @@ SQLite 是本系统的状态数据库，不可放到不可靠的网络共享盘�
 | `uvicorn` | 必需 | ASGI Server | 单机可直接运行；进程数按模型和 SQLite 约束配置 |
 | `pydantic` / `pydantic-settings` | 必需 | DTO、配置、环境变量校验 | secret 字段禁止日志输出 |
 | `httpx` | 必需 | 异步调用两个 llama.cpp 服务 | 设置连接池、超时、重试边界 |
-| `qdrant-client` | 必需 | Qdrant collection、point、filter、alias、snapshot 操作 | 与服务端版本做兼容测试 |
+| `qdrant-client` | 必需 | Qdrant collection、point、filter、snapshot 操作 | 与服务端版本做兼容测试 |
 | `tree-sitter` | 必需 | 代码语法树解析 | 仅安装目标仓库所需 grammar |
 | Tree-sitter language grammars | 按仓库语言必需 | Python/Java/Go/TS 等语言节点解析 | runtime 与 grammar 一起锁定 |
 | `aiosqlite` 或同步 SQLite adapter | 必需 | SQLite 事务、FTS、job 状态 | 首版保持单写者模型 |
@@ -671,7 +671,7 @@ default.yaml < environment yaml < 本机 .env < 进程环境变量 < CLI 显式�
 1. Windows：WSL2 → Docker Desktop → Qdrant named volume/container。
 2. Linux：Docker Engine/Compose Plugin → Qdrant volume/container。
 3. 固定 Qdrant image tag/digest。
-4. 验证 `/healthz`、collection CRUD 和 alias 切换。
+4. 验证 `/healthz`、collection CRUD 和按 snapshot ID 直接检索。
 
 ### 阶段 D：创建项目环境
 
@@ -887,7 +887,7 @@ sha256sum --check manifest.sha256
 | SQLite | 可以创建 FTS5 虚拟表，WAL 可启用 |
 | LLM | `/health` 为 ready，chat endpoint 返回内容 |
 | Embedding | `/health` 为 ready，批量输入返回等长固定维度向量 |
-| Qdrant | `/healthz` 正常，可创建 collection、upsert、search、切换 alias |
+| Qdrant | `/healthz` 正常，可创建 collection、upsert、按 snapshot collection search |
 | Tree-sitter | 目标语言 fixture 能产生预期函数/类节点和行号 |
 | RAG API | `/health/live` 与 `/health/ready` 正常 |
 | Worker | 能对 sample repo 完成 job 并发布 snapshot |
@@ -901,7 +901,7 @@ OS/architecture
 Python/uv/Git 版本
 llama.cpp 两实例 health、model alias、可用 endpoint
 Embedding dimension 和探针结果
-Qdrant 版本、active aliases、磁盘状态
+Qdrant 版本、published snapshots 对应 collection、磁盘状态
 SQLite 版本、FTS5、migration、WAL
 目标仓库路径、commit、可读性
 解析器/grammar 版本
@@ -922,7 +922,7 @@ SQLite 版本、FTS5、migration、WAL
 - `pyproject.toml`、`uv.lock`、配置、prompt 和 migration。
 - llama.cpp 版本、启动参数和模型 SHA-256。
 - 当前仓库 commit；严格离线时保存 bare mirror/bundle。
-- 当前 active alias 与 snapshot 对应关系。
+- 当前 SQLite published snapshot 与 Qdrant collection 对应关系。
 
 ### 15.2 升级顺序
 
@@ -931,7 +931,7 @@ SQLite 版本、FTS5、migration、WAL
 3. 一次只升级一个组件。
 4. 运行 migration、索引兼容检查和完整评估。
 5. Embedding/切分器变化时构建新 collection，不原地覆盖。
-6. 保留旧 Python lock、Qdrant image、llama.cpp 二进制和 active collection，直到观察期结束。
+6. 保留旧 Python lock、Qdrant image、llama.cpp 二进制和旧 published collection，直到观察期结束。
 
 ### 15.3 不兼容变更判断
 

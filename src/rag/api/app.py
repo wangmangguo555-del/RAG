@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -80,9 +81,24 @@ def create_app(container: Container | None = None) -> FastAPI:
 
     @app.get("/health/ready", response_model=HealthResponse, tags=["health"])
     async def ready() -> JSONResponse:
+        sqlite_ok = await app_container.metadata.health()
+        snapshot_collections_ok = False
+        if sqlite_ok:
+            try:
+                published = await app_container.metadata.list_published_snapshots()
+                snapshot_checks = await asyncio.gather(
+                    *[
+                        app_container.vectors.snapshot_exists(snapshot.repo_id, snapshot.id)
+                        for snapshot in published
+                    ]
+                )
+                snapshot_collections_ok = all(snapshot_checks)
+            except Exception:  # noqa: BLE001 - 就绪检查必须把依赖异常转换为 503
+                snapshot_collections_ok = False
         checks = {
-            "sqlite": await app_container.metadata.health(),
+            "sqlite": sqlite_ok,
             "qdrant": await app_container.vectors.health(),
+            "published_snapshots": snapshot_collections_ok,
             "llm": await app_container.generation.health(),
             "embedding": await app_container.embeddings.health(),
         }

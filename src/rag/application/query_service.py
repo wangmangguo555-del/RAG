@@ -63,11 +63,22 @@ class QueryService:
             vector = await self.embedding.embed_query(question)
             dense_results = await asyncio.gather(
                 *[
-                    self.vectors.search(repo_id, vector, filters, self.settings.dense_top_k)
-                    for repo_id in snapshots
+                    self.vectors.search_snapshot(
+                        repo_id,
+                        snapshot_id,
+                        vector,
+                        filters,
+                        self.settings.dense_top_k,
+                    )
+                    for repo_id, snapshot_id in snapshots.items()
                 ]
             )
-            dense_hits = [hit for result in dense_results for hit in result]
+            # 同一 Embedding 空间的 cosine 分数可直接比较；先全局排序，避免仓库注册顺序
+            # 把第二个仓库的第一名错误排到第一个仓库的末位之后。
+            dense_hits = sorted(
+                (hit for result in dense_results for hit in result),
+                key=lambda hit: (-hit.score, hit.repo_id, hit.chunk_id),
+            )
         if mode in {"hybrid", "lexical"}:
             lexical_hits = await self.lexical.search_lexical(
                 question,

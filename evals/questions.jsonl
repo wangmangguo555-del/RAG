@@ -20,7 +20,7 @@
 {"id":"rag-020","question":"网页知识源如何限制协议、IP 地址和允许的主机？","repo_id":"rag-project","should_answer":true}
 {"id":"rag-021","question":"网页正文提取为什么优先选择 main 元素？","repo_id":"rag-project","should_answer":true}
 {"id":"rag-022","question":"SourceRouter 如何在 Git 与网页 adapter 之间选择？","repo_id":"rag-project","should_answer":true}
-{"id":"rag-023","question":"Qdrant active alias 如何命名和切换？","repo_id":"rag-project","should_answer":true}
+{"id":"rag-023","question":"查询如何依据 SQLite published 快照访问 Qdrant collection？","repo_id":"rag-project","should_answer":true}
 {"id":"rag-024","question":"Qdrant 稠密搜索支持哪些过滤条件？","repo_id":"rag-project","should_answer":true}
 {"id":"rag-025","question":"SQLite 初始化时启用了哪些可靠性和并发设置？","repo_id":"rag-project","should_answer":true}
 {"id":"rag-026","question":"数据库第二个迁移为什么将字段改为拼音首字母？","repo_id":"rag-project","should_answer":true}

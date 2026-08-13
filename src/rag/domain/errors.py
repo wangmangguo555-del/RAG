@@ -31,5 +31,15 @@ class VectorStoreUnavailableError(RagError):
     retryable = True
 
 
+class IndexConsistencyError(RagError):
+    code = "INDEX_CONSISTENCY_ERROR"
+    retryable = True
+
+
+class SourceUnavailableError(RagError):
+    code = "SOURCE_UNAVAILABLE"
+    retryable = True
+
+
 class NoPublishedSnapshotError(RagError):
     code = "NO_PUBLISHED_SNAPSHOT"

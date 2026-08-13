@@ -10,6 +10,8 @@ from rag.domain.models import (
     Repository,
     SearchFilter,
     SearchHit,
+    SnapshotGcCandidate,
+    SnapshotRef,
 )
 
 
@@ -42,15 +44,22 @@ class VectorStorePort(Protocol):
         self, repo_id: str, snapshot_id: str, vector_size: int
     ) -> str: ...
 
+    def collection_name(self, repo_id: str, snapshot_id: str) -> str: ...
+
     async def upsert(
         self, collection_name: str, chunks: Sequence[Chunk], vectors: Sequence[list[float]]
     ) -> None: ...
 
-    async def activate(self, repo_id: str, collection_name: str) -> None: ...
+    async def validate_snapshot_collection(
+        self, collection_name: str, *, expected_points: int, vector_size: int
+    ) -> None: ...
 
-    async def search(
+    async def snapshot_exists(self, repo_id: str, snapshot_id: str) -> bool: ...
+
+    async def search_snapshot(
         self,
         repo_id: str,
+        snapshot_id: str,
         vector: list[float],
         filters: SearchFilter,
         limit: int,
@@ -69,6 +78,25 @@ class MetadataStorePort(Protocol):
     async def create_job(self, repo_id: str, requested_ref: str) -> str: ...
 
     async def claim_next_job(self) -> IndexJob | None: ...
+
+    async def record_job_commit(self, job_id: str, commit_sha: str) -> None: ...
+
+    async def record_job_snapshot(self, job_id: str, snapshot_id: str) -> None: ...
+
+    async def heartbeat_job(self, job_id: str) -> None: ...
+
+    async def recover_stale_jobs(self, stale_before: str, max_attempts: int) -> dict[str, int]: ...
+
+    async def retry_or_fail_job(
+        self,
+        job_id: str,
+        *,
+        retryable: bool,
+        max_attempts: int,
+        retry_delay_seconds: float,
+        error_code: str,
+        error_message: str,
+    ) -> str: ...
 
     async def get_job(self, job_id: str) -> IndexJob | None: ...
 
@@ -93,6 +121,20 @@ class MetadataStorePort(Protocol):
     async def fail_snapshot(self, snapshot_id: str, message: str) -> None: ...
 
     async def get_published_snapshot(self, repo_id: str) -> str | None: ...
+
+    async def list_published_snapshots(self) -> list[SnapshotRef]: ...
+
+    async def is_snapshot_published(self, snapshot_id: str) -> bool: ...
+
+    async def count_snapshot_chunks(self, snapshot_id: str) -> int: ...
+
+    async def plan_snapshot_gc(
+        self,
+        *,
+        retain_successful: int,
+        superseded_before: str,
+        failed_before: str,
+    ) -> list[SnapshotGcCandidate]: ...
 
     async def save_file(
         self,

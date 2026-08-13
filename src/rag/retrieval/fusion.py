@@ -11,6 +11,26 @@ from rag.domain.models import SearchHit
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-/]{2,}")
 _CAMEL_PART = re.compile(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+")
 _DECLARATION = re.compile(r"^(?:class|def|async def)\s+")
+_CODE_SUFFIXES = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".go",
+    ".h",
+    ".hpp",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".php",
+    ".py",
+    ".rb",
+    ".rs",
+    ".ts",
+    ".tsx",
+    ".vue",
+}
 
 
 def _query_identifiers(question: str) -> set[str]:
@@ -117,12 +137,9 @@ def boost_exact_matches(
         if identifiers & path_terms:
             score += path_boost
         path_parts = set(path.stem.split("_"))
-        if (
-            classes
-            and normalized_path.startswith("src/rag/")
-            and path.suffix == ".py"
-            and not declaration_stub
-            and any(path_parts & class_parts for class_parts in classes.values())
+        # 类名和模块名的拆词匹配适用于常见仓库布局，不能依赖本项目的 src/rag 路径。
+        if classes and path.suffix in _CODE_SUFFIXES and not declaration_stub and any(
+            path_parts & class_parts for class_parts in classes.values()
         ):
             score += class_module_boost
         if declaration_stub and symbol in classes:

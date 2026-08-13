@@ -11,12 +11,12 @@
 | Domain | Repository、Snapshot、Chunk、SearchHit、Citation、Job 模型；Git/Embedding/Generation/Vector/Metadata 端口 |
 | Application | 索引任务和查询问答用例 |
 | Ingestion | 本地 Git commit/tree/blob、安全过滤、`.ragignore`、语言检测、确定性 chunk |
-| Infrastructure | SQLite WAL/FTS5、Qdrant snapshot collection/alias、llama.cpp chat/embedding 客户端 |
+| Infrastructure | SQLite WAL/FTS5、Qdrant 不可变 snapshot collection、llama.cpp chat/embedding 客户端 |
 | Retrieval | Dense + FTS5、RRF、content hash 去重、每文件多样性限制、context budget |
 | Generation | evidence prompt、prompt injection 边界、引用 ID 校验与结构化映射 |
 | API | FastAPI query/search/admin/live/ready/OpenAPI |
-| Worker | SQLite job queue 单 Worker 消费与失败记录 |
-| CLI | init-db、register-repo、index、worker、doctor、search、query |
+| Worker | SQLite job queue 单 Worker 消费、心跳、stale 恢复和有上限重试 |
+| CLI | init-db、register-repo、index、worker、doctor、search、query、evaluate、gc dry-run |
 | Operations | Windows/Linux 开发脚本、Qdrant loopback 启动脚本、环境加载脚本 |
 | Quality | Ruff、strict mypy、pytest、fixture、可执行检索评估与示例标注 |
 
@@ -76,7 +76,7 @@ Embedding 和候选近邻，精确数字不写死在受索引的文档中，以�
 - 仓库代码不执行，不运行 hook，不跟随网络。
 - 二进制、超大文件、常见生成目录、密钥和 `.ragignore` 路径默认排除。
 - `chunk_id` 基于 repo/commit/path/line/chunker version，point ID 使用确定性 UUIDv5。
-- 每个 snapshot 使用独立 Qdrant collection，通过 per-repo alias 发布。
+- 每个 snapshot 使用独立 Qdrant collection，SQLite `published` 是唯一发布事实源。
 - SQLite 负责事实状态和 FTS5，Qdrant 负责稠密向量。
 - 查询结果只使用 published snapshot；模型引用由服务端映射，不信任模型手写路径。
 - 配置禁止非 loopback 模型地址，避免纯本地模式误连外部服务。

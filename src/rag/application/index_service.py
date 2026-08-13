@@ -59,6 +59,7 @@ class IndexService:
             raise RepositoryNotFoundError(job.repo_id)
 
         commit = await self.git.resolve_ref(repository, job.requested_ref)
+        await self.metadata.record_job_commit(job_id, commit)
         index_version = hashlib.sha256(
             f"{self.embedding_fingerprint}|{self.settings.chunker_version}".encode()
         ).hexdigest()[:16]
@@ -66,13 +67,23 @@ class IndexService:
             repository.id, commit, index_version
         )
         if existing_snapshot:
-            stats = {"files": 0, "chunks": 0, "skipped": 0, "reused_snapshot": 1}
-            await self.metadata.complete_job(job_id, success=True, commit_sha=commit)
-            return stats
+            try:
+                stats = {"files": 0, "chunks": 0, "skipped": 0, "reused_snapshot": 1}
+                await self.metadata.record_job_snapshot(job_id, existing_snapshot)
+                await self.metadata.complete_job(job_id, success=True, commit_sha=commit)
+                return stats
+            except Exception:
+                # 已发布快照复用属于幂等成功；若只剩 job 收口失败，启动恢复会依据
+                # 精确 snapshot_id 补记成功，不能把任务退回后再次重复索引。
+                job_after_failure = await self.metadata.get_job(job_id)
+                if job_after_failure and job_after_failure.snapshot_id == existing_snapshot:
+                    return stats
+                raise
         snapshot_id = await self.metadata.create_snapshot(repository.id, commit, index_version)
         collection_name: str | None = None
         stats = {"files": 0, "chunks": 0, "skipped": 0}
         try:
+            await self.metadata.record_job_snapshot(job_id, snapshot_id)
             all_blobs = await self.git.list_blobs(repository, commit)
             ragignore_lines = await self._load_ragignore(repository, all_blobs)
             blobs = filter_blobs(
@@ -134,19 +145,27 @@ class IndexService:
                 stats["chunks"] += len(pending_chunks)
             if not collection_name:
                 raise ValueError("repository produced no indexable chunks")
-            await self.vectors.activate(repository.id, collection_name)
+            sqlite_chunk_count = await self.metadata.count_snapshot_chunks(snapshot_id)
+            if sqlite_chunk_count != stats["chunks"]:
+                raise ValueError(
+                    "snapshot chunk count mismatch: "
+                    f"expected {stats['chunks']}, got {sqlite_chunk_count}"
+                )
+            assert vector_size is not None
+            await self.vectors.validate_snapshot_collection(
+                collection_name,
+                expected_points=sqlite_chunk_count,
+                vector_size=vector_size,
+            )
+            # 业务发布只提交 SQLite 事务；Qdrant collection 在此之前已完整且不可变。
             await self.metadata.publish_snapshot(snapshot_id, stats)
             await self.metadata.complete_job(job_id, success=True, commit_sha=commit)
             return stats
         except Exception as exc:
+            # 发布提交后即使 job 收口失败，也不能把用户正在读取的快照降级为 failed。
+            if await self.metadata.is_snapshot_published(snapshot_id):
+                return stats
             await self.metadata.fail_snapshot(snapshot_id, str(exc))
-            await self.metadata.complete_job(
-                job_id,
-                success=False,
-                commit_sha=commit,
-                error_code=getattr(exc, "code", "INDEXING_ERROR"),
-                error_message=str(exc),
-            )
             raise
 
     async def _load_ragignore(

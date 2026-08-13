@@ -20,7 +20,7 @@
 {"id":"rag-020","evidence":[{"path":"src/rag/ingestion/web_source.py","start_line":162,"end_line":180}],"answer_points":["HTTPS","禁止 IP","host allowlist"]}
 {"id":"rag-021","evidence":[{"path":"src/rag/ingestion/web_source.py","start_line":19,"end_line":101},{"path":"tests/unit/test_web_source.py","start_line":10,"end_line":24}],"answer_points":["优先 main","回退整个页面"]}
 {"id":"rag-022","evidence":[{"path":"src/rag/ingestion/source_router.py","start_line":9,"end_line":31}],"answer_points":["SourceType.WEB_PAGE","Git source"]}
-{"id":"rag-023","evidence":[{"path":"src/rag/infrastructure/qdrant_store.py","start_line":17,"end_line":96}],"answer_points":["active_alias_template","删除旧 alias","创建新 alias"]}
+{"id":"rag-023","evidence":[{"path":"src/rag/infrastructure/qdrant_store.py","start_line":20,"end_line":155},{"path":"src/rag/application/query_service.py","start_line":43,"end_line":82}],"answer_points":["SQLite published snapshot","不可变 collection","search_snapshot"]}
 {"id":"rag-024","evidence":[{"path":"src/rag/infrastructure/qdrant_store.py","start_line":97,"end_line":146},{"path":"LOCAL_RAG_ARCHITECTURE_AND_DEVELOPMENT_PLAN.md","start_line":241,"end_line":273}],"answer_points":["language","path prefix"]}
 {"id":"rag-025","evidence":[{"path":"src/rag/infrastructure/sqlite_store.py","start_line":33,"end_line":79}],"answer_points":["WAL","foreign_keys","busy_timeout"]}
 {"id":"rag-026","evidence":[{"path":"migrations/002_pinyin_initial_columns.sql","start_line":1,"end_line":79},{"path":"DATABASE_SCHEMA_PINYIN.md","start_line":1,"end_line":30}],"answer_points":["中文业务含义拼音首字母","领域模型和 API 不变"]}

@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from rag.domain.errors import InvalidRepositoryError
+from rag.domain.errors import InvalidRepositoryError, SourceUnavailableError
 from rag.domain.models import GitBlob, Repository, SourceType
 from rag.infrastructure.settings import IngestionSettings
 
@@ -117,7 +117,11 @@ class WebPageSource:
         response: httpx.Response | None = None
         for _ in range(6):
             self._validate_url(url)
-            response = await self.client.get(url)
+            try:
+                response = await self.client.get(url)
+            except httpx.TransportError as exc:
+                # 网络抖动不代表知识源永久无效，交由 Worker 的有界退避机制重试。
+                raise SourceUnavailableError(f"web source request failed: {exc}") from exc
             if not response.is_redirect:
                 break
             location = response.headers.get("location")
@@ -127,7 +131,12 @@ class WebPageSource:
         else:
             raise InvalidRepositoryError("web source has too many redirects")
         assert response is not None
-        response.raise_for_status()
+        if response.status_code == 429 or response.status_code >= 500:
+            raise SourceUnavailableError(
+                f"web source temporarily unavailable: HTTP {response.status_code}"
+            )
+        if response.is_error:
+            raise InvalidRepositoryError(f"web source returned HTTP {response.status_code}")
         self._validate_url(str(response.url))
         content_type = response.headers.get("content-type", "").lower()
         if "text/html" not in content_type:

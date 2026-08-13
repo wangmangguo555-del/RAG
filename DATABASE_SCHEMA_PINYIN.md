@@ -155,7 +155,7 @@ schema_migrations        [独立迁移控制表]
 | `xlwb` | 向量文本 | `embedding_text` | TEXT | 非空 | 送入 Embedding 模型的文本，包含 repo/path/symbol/lines 等检索提示头。 |
 | `nrhs` | 内容哈希 | `content_hash` | TEXT | 非空 | 规范化正文 SHA-256；用于融合结果去重和未来向量缓存。 |
 | `sfcs` | 是否测试 | `is_test` | INTEGER | 非空，默认 0 | 标记测试路径；`1` 为测试代码或测试文档。 |
-| `ysjj_json` | 元数据 JSON | `metadata_json` | TEXT | 非空 | 扩展元数据对象；当前通常为 `{}`，避免频繁改表。 |
+| `ysj_json` | 元数据 JSON | `metadata_json` | TEXT | 非空 | 扩展元数据对象；当前通常为 `{}`，避免频繁改表。 |
 
 主要索引：快照编号 `kzbh`、知识源与路径 `(zsybh, lj)`、内容哈希 `nrhs`。
 
@@ -194,15 +194,25 @@ FTS5 的 `bm25()` 权重顺序与字段位置相关，修改本表字段顺序�
 | `cjsj` | 创建时间 | `created_at` | TEXT | 非空 | 任务提交时间，用于 pending 队列排序。 |
 | `kssj` | 开始时间 | `started_at` | TEXT | 可空 | Worker 首次领取任务的时间。 |
 | `jssj` | 结束时间 | `finished_at` | TEXT | 可空 | 成功或失败完成的时间。 |
-| `xtsj` | 心跳时间 | `heartbeat_at` | TEXT | 可空 | 最近一次状态更新时间；可用于未来检测失联 Worker。 |
+| `xtsj` | 心跳时间 | `heartbeat_at` | TEXT | 可空 | Worker 运行期间周期更新；启动时据此恢复超时的 running 任务。 |
+| `xccssj` | 下次重试时间 | `next_retry_at` | TEXT | 可空 | 可重试故障的最早重新领取时间；成功、最终失败或 stale 恢复时清空。 |
+| `kzbh` | 快照编号 | `snapshot_id` | TEXT | 可空，外键 | 记录本任务实际构建或复用的快照；恢复时只据此快照判断发布是否完成，删除快照时置空。 |
 
-主要索引：`(zt, cjsj)`，用于按创建顺序快速领取 pending 任务。
+主要索引：`(zt, cjsj)` 兼容原有队列访问；`(zt, xccssj, cjsj)` 用于领取已经到达退避时间的
+pending 任务。
 
 ## 10. 迁移与兼容说明
 
 - `001_initial.sql` 保留原始英文字段 schema，确保已有数据库的迁移历史可追溯。
 - `002_pinyin_initial_columns.sql` 通过 `ALTER TABLE ... RENAME COLUMN` 保留原表数据、主键、
   外键和普通索引。
+- `003_job_recovery.sql` 最初增加 `index_jobs.xcchs`、`index_jobs.kzbh` 和重试领取索引，
+  为 Worker 心跳恢复、有上限重试和指数退避提供持久化状态；同时用部分唯一索引保证
+  每个知识源最多只有一个 `published` 快照。
+- `004_correct_retry_column_initials.sql` 将命名不完整的 `xcchs` 原位更名为 `xccssj`，
+  严格对应“下次重试时间”的六个中文业务字首字母，并保留已有重试时间数据。
+- `005_correct_metadata_column_initials.sql` 将重复字母的 `ysjj_json` 原位更名为
+  `ysj_json`，严格对应“元数据”的拼音首字母，并保留 `_json` 格式后缀。
 - FTS5 虚拟表不支持同样的字段改名流程，因此迁移会删除并从 `chunks` 全量重建
   `chunks_fts`；正文事实数据不会丢失。
 - `schema_migrations` 在普通迁移执行前由初始化代码将 `version/applied_at` 改为

@@ -142,3 +142,25 @@ class IndexJob:
     resolved_commit_sha: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+    attempt: int = 0
+    next_retry_at: str | None = None
+    snapshot_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotRef:
+    """查询和运维使用的不可变快照引用。"""
+
+    id: str
+    repo_id: str
+    status: SnapshotStatus
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotGcCandidate:
+    """快照回收计划项；生成计划本身不会删除任何业务数据。"""
+
+    id: str
+    repo_id: str
+    status: SnapshotStatus
+    reason: str

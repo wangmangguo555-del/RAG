@@ -1,0 +1,4 @@
+interface:
+  display_name: "RAG 数据库治理"
+  short_description: "规范 SQLite 表、字段、约束、迁移与验收流程"
+  default_prompt: "Use $rag-database-governance to design and safely migrate this project database change."

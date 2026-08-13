@@ -17,7 +17,7 @@ snapshot 隔离、原子发布和服务端引用校验保证索引与回答可�
 - 使用 Qdrant 稠密检索与 SQLite FTS5 关键词检索，并以 RRF 融合排序。
 - 按内容去重并限制单文件 chunk 数，避免上下文被单一文件占满。
 - 以 `[E1]` 等短证据 ID 生成回答，由服务端映射真实路径、行号和版本。
-- 提供 FastAPI、CLI、后台 Worker、任务状态、健康检查和结构化日志。
+- 提供 FastAPI、CLI、后台 Worker、任务心跳/故障恢复、健康检查和结构化日志。
 
 ### 1.2 技术栈
 
@@ -26,7 +26,7 @@ snapshot 隔离、原子发布和服务端引用校验保证索引与回答可�
 | FastAPI | 查询、搜索、管理和健康检查 API |
 | llama.cpp LLM | 基于证据生成最终回答 |
 | llama.cpp Embedding | 文档与查询向量化 |
-| Qdrant | 稠密向量索引、检索及 active alias |
+| Qdrant | 按不可变 snapshot collection 保存和检索稠密向量 |
 | SQLite + FTS5 | 仓库、任务、快照、chunk 元数据与关键词检索 |
 | Git CLI | 固定 commit、tree/blob 枚举和内容读取 |
 | Typer | `ragctl` 管理 CLI |
@@ -82,7 +82,7 @@ flowchart LR
 | `rag-worker` | 无监听端口 | 异步消费索引任务，抓取、过滤、切分和发布索引 |
 | LLM 服务 | `127.0.0.1:8080` | 加载生成模型并提供 OpenAI 兼容接口 |
 | Embedding 服务 | `127.0.0.1:8081` | 加载向量模型并提供批量 Embedding 接口 |
-| Qdrant | `127.0.0.1:6333` | 保存 snapshot collection 和 active alias |
+| Qdrant | `127.0.0.1:6333` | 保存不可变 snapshot collection；不保存业务发布状态 |
 | SQLite | 本地文件 | 保存元数据、任务、快照、chunk 和 FTS5 索引 |
 
 所有后端服务默认仅监听 loopback；普通用户只访问 `rag-api`。全量索引由 Worker
@@ -104,7 +104,10 @@ RAG-Project/
 │  └─ questions.jsonl
 ├─ migrations/  # SQLite schema 与迁移
 │  ├─ 001_initial.sql
-│  └─ 002_pinyin_initial_columns.sql
+│  ├─ 002_pinyin_initial_columns.sql
+│  ├─ 003_job_recovery.sql
+│  ├─ 004_correct_retry_column_initials.sql
+│  └─ 005_correct_metadata_column_initials.sql
 ├─ prompts/  # 回答约束与 evidence 模板
 │  ├─ answer_context.txt
 │  └─ answer_system.txt
@@ -116,6 +119,14 @@ RAG-Project/
 │  ├─ start-qdrant-local.ps1
 │  └─ worker.ps1
 ├─ skills/  # 项目专用 Codex 技能
+│  ├─ rag-database-governance/
+│  │  ├─ agents/
+│  │  │  └─ openai.yaml
+│  │  ├─ references/
+│  │  │  └─ database-rules.md
+│  │  ├─ scripts/
+│  │  │  └─ audit_database.py
+│  │  └─ SKILL.md
 │  └─ sync-readme-structure/
 │     ├─ agents/
 │     │  └─ openai.yaml
@@ -188,6 +199,8 @@ RAG-Project/
 │     ├─ test_citations.py
 │     ├─ test_discovery.py
 │     ├─ test_fusion.py
+│     ├─ test_index_service.py
+│     ├─ test_query_service.py
 │     ├─ test_retrieval_evaluation.py
 │     ├─ test_sync_readme_structure.py
 │     └─ test_web_source.py
@@ -281,13 +294,16 @@ sequenceDiagram
         W->>Q: 幂等 upsert 到新 collection
         W->>S: 保存 files、chunks 与 FTS5
     end
-    W->>Q: active alias 原子切换
+    W->>S: 校验 SQLite chunk 数量
+    W->>Q: 校验 point 数量与向量维度
     W->>S: snapshot=published，job=succeeded
 ```
 
-每个仓库、每个 snapshot 使用独立 Qdrant collection；查询只访问
-`repo_<repo_id>__active` alias 和 SQLite 中的 `published` snapshot。构建失败时快照与
-任务均标记为 `failed`，不会暴露半成品；同一版本稍后可复用失败快照 ID重新执行。
+每个仓库、每个 snapshot 使用独立 Qdrant collection。SQLite 的 `published` 状态是唯一
+发布事实源；查询先读取已发布 snapshot ID，再直接访问对应的不可变 collection。构建失败
+不会改变旧 published 快照，同一版本稍后可复用失败快照 ID 重新执行，并重建其向量集合。
+Worker 周期性更新任务心跳；进程重启后会恢复超时任务，已完成发布但未收口的任务直接标记
+成功，其余可重试故障按上限和指数退避重新入队。
 
 当前实现每次内容版本变化会构建完整新快照。跨 snapshot 的 Embedding cache 和未变化
 chunk 复制属于后续增量优化，不应与当前的“同版本已发布快照复用”混淆。
@@ -300,7 +316,8 @@ flowchart TD
     P --> QE["Query Embedding"]
     QE --> D["Qdrant Dense Top K"]
     P --> K["SQLite FTS5 Top K"]
-    D --> R["RRF 融合"]
+    D --> G["跨仓库 Dense 全局排序"]
+    G --> R["RRF 融合"]
     K --> R
     R --> H["SQLite 回填完整 chunk"]
     H --> V["content_hash 去重 + 单文件数量限制"]
@@ -334,10 +351,11 @@ repo、版本、路径、行号和 snippet；如果没有合法引用，则返�
 | File、Chunk 正文和元数据 | SQLite | 行号引用、内容回填和 FTS5 |
 | 关键词索引 | SQLite FTS5 | 路径、符号、错误码和技术词精确召回 |
 | 向量与检索 payload | Qdrant | 高效相似度检索和 metadata filter |
-| 当前可查询版本 | SQLite published 状态 + Qdrant alias | 防止查询看到半构建数据 |
+| 当前可查询版本 | SQLite published 状态 | 唯一发布事实源，防止查询看到半构建数据 |
 
-SQLite 启用 WAL、foreign keys 和 busy timeout。发布顺序是先激活 Qdrant alias，再将
-SQLite snapshot 标记为 published；失败任务保留错误码和错误消息以便诊断和重试。
+SQLite 启用 WAL、foreign keys 和 busy timeout。发布前先校验 SQLite chunk 数、Qdrant
+point 数和向量维度，再以单个 SQLite 事务切换 published/superseded 状态；失败任务保留
+机器错误码、错误信息、尝试次数和下次重试时间。
 
 ### 4.6 关键设计决策
 
@@ -345,7 +363,7 @@ SQLite snapshot 标记为 published；失败任务保留错误码和错误消息
 - 索引与 API 分离：Worker 承担耗时任务，API 只负责提交、查询和读取状态。
 - 双路检索：Dense 处理语义相似，FTS5 处理路径、标识符、错误码和精确技术词。
 - RRF 融合：避免人为校准两个不同分数空间，参数少且结果稳定。
-- Snapshot 隔离：新索引写入独立 collection，完成后切 alias，不发布半成品。
+- Snapshot 隔离：新索引写入独立 collection，校验完成后只提交 SQLite 发布事务。
 - 服务端引用映射：模型只选择证据 ID，真实来源信息由可信代码生成。
 - 默认本地与最小权限：模型端点限制 loopback，网页源限制 HTTPS 与主机白名单。
 - 失败可重放：任务和快照记录完整状态，确定性 ID 支持安全重试。
@@ -405,7 +423,11 @@ uv run ragctl register-repo --id my-repo --path E:\repos\my-repo --ref main
 uv run ragctl index my-repo
 uv run ragctl search "refresh token 如何失效" --repo my-repo
 uv run ragctl query "refresh token 如何失效" --repo my-repo
+uv run ragctl gc --dry-run
 ```
+
+`gc --dry-run` 只输出超过保留数量或诊断宽限期的快照与 collection，不执行删除；当前版本
+拒绝 `--no-dry-run`，避免在自动清理能力和恢复演练完成前误删活动数据。
 
 ### 6.2 检索评估
 

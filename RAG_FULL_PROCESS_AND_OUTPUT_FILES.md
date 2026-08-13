@@ -225,11 +225,10 @@ Chunk 正文……
 
 每个网页源或索引快照建立独立 Qdrant collection；同时把标题、章节和正文写入 SQLite FTS5，支持精确术语与语义混合检索。
 
-推荐 collection 与别名命名：
+推荐不可变 collection 命名：
 
 ```text
 web_{source_id}__snap_{snapshot_id}
-web_{source_id}__active
 ```
 
 - 向量：`D:\application\qdrant\storage\`
@@ -240,11 +239,12 @@ web_{source_id}__active
 
 ### 阶段 10：发布网页索引快照
 
-索引成功后切换活动别名。旧快照继续保留用于回滚，新快照标记为 `published`；失败时保持旧索引可用。
+索引成功后在 SQLite 事务中把新快照标记为 `published`、旧快照标记为 `superseded`。
+查询根据该状态直接访问对应 collection；失败时保持旧索引可用。
 
 - 发布状态与统计：`data/sqlite/rag.db` → `snapshots`
 - 采集任务统计：`data/web/crawl_runs/{run_id}/summary.json`
-- Qdrant 别名：由 `D:\application\qdrant\storage\` 管理
+- Qdrant collection：由 `D:\application\qdrant\storage\` 管理
 - 当前状态：快照发布机制已有，但语义仍偏 Git，需改为网页源版本
 
 统计建议包含：

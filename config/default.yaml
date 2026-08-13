@@ -25,7 +25,6 @@ embedding:
 
 qdrant:
   url: http://127.0.0.1:6333
-  active_alias_template: "repo_{repo_id}__active"
   distance: cosine
 
 sqlite:
@@ -35,6 +34,13 @@ sqlite:
 
 ingestion:
   worker_poll_seconds: 2
+  worker_heartbeat_seconds: 10
+  job_stale_after_seconds: 300
+  job_max_attempts: 3
+  job_retry_base_seconds: 5
+  snapshot_retained_successful: 3
+  snapshot_superseded_grace_seconds: 86400
+  snapshot_failed_grace_seconds: 604800
   max_file_bytes: 1048576
   embedding_batch_size: 8
   chunk_target_tokens: 500

@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import Literal, cast
@@ -115,6 +116,52 @@ def index(repo_id: str, ref: str | None = None, run_now: bool = True) -> None:
 @app.command("worker")
 def worker(once: bool = typer.Option(False)) -> None:
     asyncio.run(run_worker(once=once))
+
+
+@app.command("gc")
+def gc_snapshots(
+    dry_run: bool = typer.Option(
+        True,
+        "--dry-run/--no-dry-run",
+        help="仅输出快照回收候选；阶段 A 尚不执行物理删除。",
+    ),
+) -> None:
+    """只生成快照回收计划；阶段 A 默认不自动删除任何业务数据。"""
+
+    if not dry_run:
+        raise typer.BadParameter("当前版本仅支持 --dry-run，不允许直接删除快照")
+
+    async def run() -> None:
+        container = _build_container()
+        try:
+            await container.metadata.initialize()
+            settings = container.settings.ingestion
+            now = datetime.now(UTC)
+            candidates = await container.metadata.plan_snapshot_gc(
+                retain_successful=settings.snapshot_retained_successful,
+                superseded_before=(
+                    now - timedelta(seconds=settings.snapshot_superseded_grace_seconds)
+                ).isoformat(),
+                failed_before=(
+                    now - timedelta(seconds=settings.snapshot_failed_grace_seconds)
+                ).isoformat(),
+            )
+            if not candidates:
+                typer.echo("No snapshots are eligible for collection.")
+                return
+            typer.echo("Dry-run only; no SQLite rows or Qdrant collections were deleted.")
+            for candidate in candidates:
+                collection_name = container.vectors.collection_name(
+                    candidate.repo_id, candidate.id
+                )
+                typer.echo(
+                    f"{candidate.status.value}\t{candidate.repo_id}\t{candidate.id}\t"
+                    f"{collection_name}\t{candidate.reason}"
+                )
+        finally:
+            await container.close()
+
+    asyncio.run(run())
 
 
 @app.command("search")

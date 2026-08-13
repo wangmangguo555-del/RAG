@@ -39,7 +39,7 @@ EXPECTED_PINYIN_COLUMNS = {
         "xlwb",
         "nrhs",
         "sfcs",
-        "ysjj_json",
+        "ysj_json",
     },
     "chunks_fts": {"fpbh", "kzbh", "zsybh", "lj", "fh", "nr"},
     "index_jobs": {
@@ -55,6 +55,8 @@ EXPECTED_PINYIN_COLUMNS = {
         "kssj",
         "jssj",
         "xtsj",
+        "xccssj",
+        "kzbh",
     },
 }
 
@@ -111,6 +113,187 @@ async def test_failed_snapshot_can_be_retried(tmp_path: Path) -> None:
     await store.fail_snapshot(first, "temporary model failure")
     retried = await store.create_snapshot("demo", "b" * 40, "v1")
     assert retried == first
+
+
+@pytest.mark.asyncio
+async def test_stale_job_recovery_requeues_unpublished_job(tmp_path: Path) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    database = tmp_path / "rag.db"
+    store = SqliteStore(SqliteSettings(path=database, migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    job_id = await store.create_job("demo", "HEAD")
+    claimed = await store.claim_next_job()
+    assert claimed is not None and claimed.id == job_id
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE index_jobs SET xtsj=? WHERE bh=?", ("2020-01-01T00:00:00+00:00", job_id)
+        )
+        connection.commit()
+
+    result = await store.recover_stale_jobs("2021-01-01T00:00:00+00:00", max_attempts=3)
+
+    recovered = await store.get_job(job_id)
+    assert result == {"recovered": 1, "completed": 0, "failed": 0}
+    assert recovered is not None and recovered.status.value == "pending"
+
+
+@pytest.mark.asyncio
+async def test_stale_job_recovery_completes_already_published_job(tmp_path: Path) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    database = tmp_path / "rag.db"
+    store = SqliteStore(SqliteSettings(path=database, migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    commit = "c" * 40
+    job_id = await store.create_job("demo", "HEAD")
+    await store.claim_next_job()
+    await store.record_job_commit(job_id, commit)
+    snapshot_id = await store.create_snapshot("demo", commit, "v1")
+    await store.record_job_snapshot(job_id, snapshot_id)
+    await store.publish_snapshot(snapshot_id, {"files": 1, "chunks": 1})
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE index_jobs SET xtsj=? WHERE bh=?", ("2020-01-01T00:00:00+00:00", job_id)
+        )
+        connection.commit()
+
+    result = await store.recover_stale_jobs("2021-01-01T00:00:00+00:00", max_attempts=3)
+
+    recovered = await store.get_job(job_id)
+    assert result == {"recovered": 0, "completed": 1, "failed": 0}
+    assert recovered is not None and recovered.status.value == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_stale_job_does_not_mistake_old_commit_snapshot_for_new_index_version(
+    tmp_path: Path,
+) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    database = tmp_path / "rag.db"
+    store = SqliteStore(SqliteSettings(path=database, migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    commit = "f" * 40
+    old_snapshot = await store.create_snapshot("demo", commit, "old-index-version")
+    await store.publish_snapshot(old_snapshot, {"files": 1, "chunks": 1})
+    job_id = await store.create_job("demo", "HEAD")
+    await store.claim_next_job()
+    await store.record_job_commit(job_id, commit)
+    new_snapshot = await store.create_snapshot("demo", commit, "new-index-version")
+    await store.record_job_snapshot(job_id, new_snapshot)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE index_jobs SET xtsj=? WHERE bh=?", ("2020-01-01T00:00:00+00:00", job_id)
+        )
+        connection.commit()
+
+    result = await store.recover_stale_jobs("2021-01-01T00:00:00+00:00", max_attempts=3)
+
+    recovered = await store.get_job(job_id)
+    assert result == {"recovered": 1, "completed": 0, "failed": 0}
+    assert recovered is not None and recovered.status.value == "pending"
+
+
+@pytest.mark.asyncio
+async def test_retryable_job_uses_backoff_and_stops_at_max_attempts(tmp_path: Path) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    store = SqliteStore(SqliteSettings(path=tmp_path / "rag.db", migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    job_id = await store.create_job("demo", "HEAD")
+    first_attempt = await store.claim_next_job()
+    assert first_attempt is not None and first_attempt.attempt == 1
+
+    status = await store.retry_or_fail_job(
+        job_id,
+        retryable=True,
+        max_attempts=2,
+        retry_delay_seconds=0,
+        error_code="MODEL_UNAVAILABLE",
+        error_message="本地模型暂时不可用",
+    )
+    queued = await store.get_job(job_id)
+    assert status == "pending"
+    assert queued is not None and queued.next_retry_at is not None
+
+    second_attempt = await store.claim_next_job()
+    assert second_attempt is not None and second_attempt.attempt == 2
+    status = await store.retry_or_fail_job(
+        job_id,
+        retryable=True,
+        max_attempts=2,
+        retry_delay_seconds=0,
+        error_code="MODEL_UNAVAILABLE",
+        error_message="本地模型仍不可用",
+    )
+    failed = await store.get_job(job_id)
+    assert status == "failed"
+    assert failed is not None and failed.status.value == "failed"
+    assert failed.next_retry_at is None
+
+
+@pytest.mark.asyncio
+async def test_gc_plan_never_includes_published_snapshot(tmp_path: Path) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    store = SqliteStore(SqliteSettings(path=tmp_path / "rag.db", migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    first = await store.create_snapshot("demo", "d" * 40, "v1")
+    await store.publish_snapshot(first, {"files": 1, "chunks": 1})
+    second = await store.create_snapshot("demo", "e" * 40, "v1")
+    await store.publish_snapshot(second, {"files": 1, "chunks": 1})
+
+    candidates = await store.plan_snapshot_gc(
+        retain_successful=1,
+        superseded_before="9999-01-01T00:00:00+00:00",
+        failed_before="9999-01-01T00:00:00+00:00",
+    )
+
+    assert [candidate.id for candidate in candidates] == [first]
+    assert second not in {candidate.id for candidate in candidates}
+
+
+@pytest.mark.asyncio
+async def test_gc_retention_counts_recent_superseded_snapshots(tmp_path: Path) -> None:
+    migrations = Path(__file__).resolve().parents[2] / "migrations"
+    database = tmp_path / "rag.db"
+    store = SqliteStore(SqliteSettings(path=database, migrations_dir=migrations))
+    await store.initialize()
+    await store.register_repository(
+        Repository("demo", "Demo", SourceType.WORKING_TREE, str(tmp_path), "HEAD")
+    )
+    oldest = await store.create_snapshot("demo", "1" * 40, "v1")
+    await store.publish_snapshot(oldest, {"files": 1, "chunks": 1})
+    recent_old = await store.create_snapshot("demo", "2" * 40, "v1")
+    await store.publish_snapshot(recent_old, {"files": 1, "chunks": 1})
+    current = await store.create_snapshot("demo", "3" * 40, "v1")
+    await store.publish_snapshot(current, {"files": 1, "chunks": 1})
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE snapshots SET fbsj=? WHERE bh=?",
+            ("2020-01-01T00:00:00+00:00", oldest),
+        )
+        connection.commit()
+
+    candidates = await store.plan_snapshot_gc(
+        retain_successful=2,
+        superseded_before="2021-01-01T00:00:00+00:00",
+        failed_before="2021-01-01T00:00:00+00:00",
+    )
+
+    assert [candidate.id for candidate in candidates] == [oldest]
+    assert recent_old not in {candidate.id for candidate in candidates}
 
 
 @pytest.mark.asyncio
